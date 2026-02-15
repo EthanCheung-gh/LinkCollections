@@ -4,6 +4,7 @@ import type { Settings } from '../types'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { setLanguage } from '../i18n'
+import { DEFAULT_FAVICON_SERVICES } from '../utils/favicon'
 
 export const useUIStore = defineStore('ui', () => {
   const { t } = useI18n()
@@ -77,7 +78,9 @@ export const useUIStore = defineStore('ui', () => {
         sidebarCollapsed: settings.value.sidebarCollapsed ?? false,
         theme: settings.value.theme || 'light',
         autoFetchIcon: settings.value.autoFetchIcon ?? true,
-        language: settings.value.language || 'en'
+        language: settings.value.language || 'en',
+        faviconService: settings.value.faviconService || DEFAULT_FAVICON_SERVICES,
+        useForeignFavicon: settings.value.useForeignFavicon ?? false
       }
       settings.value = await window.electronAPI.updateSettings(settingsData)
       applyTheme(settings.value.theme)

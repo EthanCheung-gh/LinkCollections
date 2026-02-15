@@ -19,10 +19,7 @@
               {{ t('settings.chooseTheme') }}
             </div>
           </div>
-          <el-radio-group
-            v-model="localSettings.theme"
-            @change="handleThemeChange"
-          >
+          <el-radio-group v-model="localSettings.theme" @change="handleThemeChange">
             <el-radio-button value="light">
               {{ t('settings.themeLight') }}
             </el-radio-button>
@@ -46,14 +43,8 @@
             style="width: 180px"
             @change="handleLanguageChange"
           >
-            <el-option
-              :label="t('settings.languageEn')"
-              value="en"
-            />
-            <el-option
-              :label="t('settings.languageZh')"
-              value="zh"
-            />
+            <el-option :label="t('settings.languageEn')" value="en" />
+            <el-option :label="t('settings.languageZh')" value="zh" />
           </el-select>
         </div>
       </div>
@@ -72,10 +63,7 @@
               {{ t('settings.primaryBrowser') }}
             </div>
           </div>
-          <div
-            class="browser-inputs"
-            style="width: 400px"
-          >
+          <div class="browser-inputs" style="width: 400px">
             <el-input
               v-model="defaultBrowserName"
               :placeholder="t('settings.browserName')"
@@ -116,19 +104,11 @@
                   style="flex: 2"
                 />
               </div>
-              <el-button
-                text
-                type="danger"
-                @click="removeBrowser(index)"
-              >
+              <el-button text type="danger" @click="removeBrowser(index)">
                 <i class="i-heroicons-x-mark" />
               </el-button>
             </div>
-            <el-button
-              text
-              type="primary"
-              @click="addBrowser"
-            >
+            <el-button text type="primary" @click="addBrowser">
               <i class="i-heroicons-plus" />
               {{ t('settings.addBrowser') }}
             </el-button>
@@ -150,10 +130,23 @@
               {{ t('settings.autoFetchFaviconDesc') }}
             </div>
           </div>
-          <el-switch
-            v-model="localSettings.autoFetchIcon"
-            @change="handleAutoFetchChange"
-          />
+          <el-switch v-model="localSettings.autoFetchIcon" @change="handleAutoFetchChange" />
+        </div>
+        <div v-if="localSettings.autoFetchIcon" class="settings-item">
+          <div class="settings-item-content">
+            <div class="settings-item-label">
+              {{ t('settings.faviconService') }}
+            </div>
+            <div class="settings-item-description">
+              {{ t('settings.faviconServiceDesc') }}
+            </div>
+          </div>
+          <el-radio-group v-model="localSettings.useForeignFavicon">
+            <el-radio-button :value="false">
+              {{ t('settings.domestic') }} (iow.cn)
+            </el-radio-button>
+            <el-radio-button :value="true"> {{ t('settings.foreign') }} (Google) </el-radio-button>
+          </el-radio-group>
         </div>
       </div>
 
@@ -190,10 +183,7 @@
               {{ t('settings.clearAllDataDesc') }}
             </div>
           </div>
-          <el-button
-            type="danger"
-            @click="clearAllData"
-          >
+          <el-button type="danger" @click="clearAllData">
             {{ t('settings.clearAll') }}
           </el-button>
         </div>
@@ -204,10 +194,7 @@
       <el-button @click="resetToDefaults">
         {{ t('settings.resetToDefaults') }}
       </el-button>
-      <el-button
-        type="primary"
-        @click="saveSettings"
-      >
+      <el-button type="primary" @click="saveSettings">
         {{ t('common.save') }}
       </el-button>
     </div>
@@ -222,6 +209,7 @@ import { storeToRefs } from 'pinia'
 import { useUIStore, useBookmarkStore, useFolderStore, useTagStore } from '../../stores'
 import type { Settings } from '../../types'
 import ImportExport from './ImportExport.vue'
+import { DEFAULT_FAVICON_SERVICES } from '../../utils/favicon'
 
 const { t } = useI18n()
 const uiStore = useUIStore()
@@ -238,7 +226,9 @@ const localSettings = ref<Settings>({
   sidebarCollapsed: false,
   theme: 'light',
   autoFetchIcon: true,
-  language: 'en'
+  language: 'en',
+  faviconService: DEFAULT_FAVICON_SERVICES,
+  useForeignFavicon: false
 })
 
 const defaultBrowserName = ref('')
@@ -251,7 +241,9 @@ const defaultSettings: Settings = {
   sidebarCollapsed: false,
   theme: 'light',
   autoFetchIcon: true,
-  language: 'en'
+  language: 'en',
+  faviconService: DEFAULT_FAVICON_SERVICES,
+  useForeignFavicon: false
 }
 
 let isSaving = false

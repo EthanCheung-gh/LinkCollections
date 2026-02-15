@@ -1,17 +1,11 @@
 <template>
   <div class="list-view">
-    <div
-      v-if="filteredBookmarks.length === 0"
-      class="empty-state"
-    >
+    <div v-if="filteredBookmarks.length === 0" class="empty-state">
       <i class="i-heroicons-list-bullet text-6xl text-gray-300" />
       <p class="text-gray-500">
         {{ searchQuery ? 'No bookmarks match your search.' : 'No bookmarks in this folder.' }}
       </p>
-      <p
-        v-if="!searchQuery"
-        class="text-gray-400 text-sm mt-2"
-      >
+      <p v-if="!searchQuery" class="text-gray-400 text-sm mt-2">
         Add a bookmark using button above
       </p>
     </div>
@@ -25,31 +19,20 @@
     >
       <el-table-column width="50">
         <template #default="{ row }">
-          <div
-            class="favicon-cell"
-            title="Click to refresh favicon"
-            @click="refreshFavicon(row)"
-          >
+          <div class="favicon-cell" title="Click to refresh favicon" @click="refreshFavicon(row)">
             <img
               v-if="row.favicon"
               :src="row.favicon"
               :alt="row.title"
               class="favicon-small"
               @error="handleFaviconError(row)"
-            >
-            <i
-              v-else
-              class="i-heroicons-globe-alt default-icon-small"
             />
+            <i v-else class="i-heroicons-globe-alt default-icon-small" />
           </div>
         </template>
       </el-table-column>
 
-      <el-table-column
-        prop="title"
-        label="Title"
-        min-width="200"
-      >
+      <el-table-column prop="title" label="Title" min-width="200">
         <template #default="{ row }">
           <div class="title-cell">
             <div
@@ -79,12 +62,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column
-        prop="tags"
-        label="Tags"
-        width="200"
-        class-name="responsive-col"
-      >
+      <el-table-column prop="tags" label="Tags" width="200" class-name="responsive-col">
         <template #default="{ row }">
           <div class="tags-cell">
             <el-tag
@@ -97,20 +75,12 @@
             >
               <span v-html="highlightText(getTagName(tagId), props.searchQuery)" />
             </el-tag>
-            <span
-              v-if="row.tags.length === 0"
-              class="no-tags"
-            >-</span>
+            <span v-if="row.tags.length === 0" class="no-tags">-</span>
           </div>
         </template>
       </el-table-column>
 
-      <el-table-column
-        prop="visitCount"
-        label="Visits"
-        width="80"
-        sortable="custom"
-      >
+      <el-table-column prop="visitCount" label="Visits" width="80" sortable="custom">
         <template #default="{ row }">
           <div class="visits-cell">
             <i class="i-heroicons-chart-bar" />
@@ -119,12 +89,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column
-        prop="lastVisited"
-        label="Last Visited"
-        width="120"
-        sortable="custom"
-      >
+      <el-table-column prop="lastVisited" label="Last Visited" width="120" sortable="custom">
         <template #default="{ row }">
           <span class="last-visited-cell">
             {{ row.lastVisited ? formatLastVisited(row.lastVisited) : '-' }}
@@ -132,20 +97,10 @@
         </template>
       </el-table-column>
 
-      <el-table-column
-        label="Actions"
-        width="100"
-        fixed="right"
-      >
+      <el-table-column label="Actions" width="100" fixed="right">
         <template #default="{ row }">
-          <el-dropdown
-            trigger="click"
-            @command="(cmd: string) => handleAction(cmd, row)"
-          >
-            <el-button
-              text
-              size="small"
-            >
+          <el-dropdown trigger="click" @command="(cmd: string) => handleAction(cmd, row)">
+            <el-button text size="small">
               <i class="i-heroicons-ellipsis-horizontal" />
             </el-button>
             <template #dropdown>
@@ -158,10 +113,7 @@
                   <i class="i-heroicons-share mr-2" />
                   Share
                 </el-dropdown-item>
-                <el-dropdown-item
-                  divided
-                  command="open-default"
-                >
+                <el-dropdown-item divided command="open-default">
                   <i class="i-heroicons-arrow-top-right-on-square mr-2" />
                   Open in Default Browser
                 </el-dropdown-item>
@@ -173,10 +125,7 @@
                   <i class="i-heroicons-globe-alt mr-2" />
                   {{ browser.name || `Browser ${index + 1}` }}
                 </el-dropdown-item>
-                <el-dropdown-item
-                  divided
-                  command="delete"
-                >
+                <el-dropdown-item divided command="delete">
                   <i class="i-heroicons-trash mr-2" />
                   Delete
                 </el-dropdown-item>
@@ -187,10 +136,7 @@
       </el-table-column>
     </el-table>
 
-    <EditDialog
-      v-model="editDialogVisible"
-      :bookmark="editingBookmark"
-    />
+    <EditDialog v-model="editDialogVisible" :bookmark="editingBookmark" />
   </div>
 </template>
 
@@ -362,7 +308,11 @@ const handleFaviconError = (bookmark: Bookmark) => {
 }
 
 const refreshFavicon = (bookmark: Bookmark) => {
-  const newFavicon = getFaviconUrl(bookmark.url)
+  const newFavicon = getFaviconUrl(
+    bookmark.url,
+    settings.value?.faviconService,
+    settings.value?.useForeignFavicon
+  )
   if (newFavicon) {
     bookmarkStore.updateBookmark(bookmark.id, { favicon: newFavicon }, false)
   }
