@@ -11,6 +11,20 @@ export const FAVICON_SERVICE_OPTIONS = [
   { label: 'Google', value: 'https://www.google.com/s2/favicons', type: 'foreign' }
 ]
 
+const SPECIAL_TLDS = ['co.uk', 'com.cn', 'com.au', 'co.jp', 'org.uk', 'org.cn', 'net.cn']
+
+export const getRootDomain = (hostname: string): string => {
+  const parts = hostname.split('.')
+  if (parts.length <= 2) return hostname
+
+  const lastTwo = parts.slice(-2).join('.')
+  if (SPECIAL_TLDS.includes(lastTwo)) {
+    return parts.slice(-3).join('.')
+  }
+
+  return parts.slice(-2).join('.')
+}
+
 export const getFaviconUrl = (
   url: string,
   faviconService?: FaviconService,
@@ -24,12 +38,15 @@ export const getFaviconUrl = (
 
     const urlObj = new URL(urlStr)
     const domain = urlObj.hostname
+    const rootDomain = getRootDomain(domain)
 
     const services = faviconService || DEFAULT_FAVICON_SERVICES
     const useForeign = useForeignFavicon ?? false
 
     const baseUrl = useForeign ? services.foreign : services.domestic
-    const faviconUrl = `${baseUrl}domain=${domain}&sz=64`
+
+    const isGoogle = baseUrl.includes('google.com')
+    const faviconUrl = isGoogle ? `${baseUrl}domain=${rootDomain}&sz=64` : `${baseUrl}${rootDomain}`
 
     return faviconUrl
   } catch (error) {
@@ -47,13 +64,14 @@ export const getFaviconUrlWithService = (url: string, serviceUrl: string): strin
 
     const urlObj = new URL(urlStr)
     const domain = urlObj.hostname
+    const rootDomain = getRootDomain(domain)
 
     const isGoogle = serviceUrl.includes('google.com')
     if (isGoogle) {
-      return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+      return `https://www.google.com/s2/favicons?domain=${rootDomain}&sz=64`
     }
 
-    return `${serviceUrl}${domain}`
+    return `${serviceUrl}${rootDomain}`
   } catch (error) {
     console.error('Invalid URL for favicon:', url, error)
     return ''
