@@ -62,7 +62,7 @@ function createWindow() {
     mainWindow.webContents.openDevTools()
 
     const csp =
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.google.com https://*.google.com https://*.gstatic.com; connect-src 'self' https://www.google.com https://*.google.com; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self';"
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self';"
 
     mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
       callback({
@@ -81,6 +81,18 @@ function createWindow() {
   } else {
     const htmlPath = path.join(__dirname, '../dist/index.html')
     console.log('Loading HTML from:', htmlPath)
+
+    const csp =
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self';"
+
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [csp]
+        }
+      })
+    })
 
     mainWindow.once('ready-to-show', () => {
       mainWindow?.show()

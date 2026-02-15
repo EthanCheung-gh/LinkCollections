@@ -1,13 +1,12 @@
 import type { FaviconService } from '../types/settings'
 
 export const DEFAULT_FAVICON_SERVICES: FaviconService = {
-  domestic: 'https://api.iow.cn.cn/getfavicon/',
+  domestic: 'direct',
   foreign: 'https://www.google.com/s2/favicons'
 }
 
 export const FAVICON_SERVICE_OPTIONS = [
-  { label: 'iow.cn', value: 'https://api.iow.cn.cn/getfavicon/', type: 'domestic' },
-  { label: '比特流', value: 'https://api.xingzhige.com/favicon/', type: 'domestic' },
+  { label: '自动获取', value: 'direct', type: 'domestic' },
   { label: 'Google', value: 'https://www.google.com/s2/favicons', type: 'foreign' }
 ]
 
@@ -45,6 +44,10 @@ export const getFaviconUrl = (
 
     const baseUrl = useForeign ? services.foreign : services.domestic
 
+    if (baseUrl === 'direct') {
+      return `${urlObj.origin}/favicon.ico`
+    }
+
     const isGoogle = baseUrl.includes('google.com')
     const faviconUrl = isGoogle ? `${baseUrl}domain=${rootDomain}&sz=64` : `${baseUrl}${rootDomain}`
 
@@ -65,6 +68,10 @@ export const getFaviconUrlWithService = (url: string, serviceUrl: string): strin
     const urlObj = new URL(urlStr)
     const domain = urlObj.hostname
     const rootDomain = getRootDomain(domain)
+
+    if (serviceUrl === 'direct') {
+      return `${urlObj.origin}/favicon.ico`
+    }
 
     const isGoogle = serviceUrl.includes('google.com')
     if (isGoogle) {

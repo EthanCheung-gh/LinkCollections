@@ -143,9 +143,9 @@
           </div>
           <el-radio-group v-model="localSettings.useForeignFavicon">
             <el-radio-button :value="false">
-              {{ t('settings.domestic') }} (iow.cn)
+              {{ t('settings.domestic') }} (自动获取)
             </el-radio-button>
-            <el-radio-button :value="true"> {{ t('settings.foreign') }} (Google) </el-radio-button>
+            <el-radio-button :value="true">{{ t('settings.foreign') }} (Google) </el-radio-button>
           </el-radio-group>
         </div>
       </div>
