@@ -242,6 +242,8 @@ LinkCollections/
 - [ ] 单元测试
 - [ ] E2E 测试
 - [x] 国际化 (i18n)
+- [x] favicon API 切换
+- [x] favicon 缓存
 
 ### 📋 计划中 (v1.2.0+)
 
