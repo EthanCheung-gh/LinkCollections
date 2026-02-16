@@ -37,9 +37,22 @@ export const useUIStore = defineStore('ui', () => {
     }
   }
 
-  const applyTheme = (theme: string) => {
+  const applyTheme = (theme: string, themeColor?: string) => {
     document.documentElement.classList.remove('light', 'dark')
     document.documentElement.classList.add(theme)
+
+    const color = themeColor || '#3B82F6'
+    document.documentElement.style.setProperty('--theme-color', color)
+    document.documentElement.style.setProperty('--el-color-primary', color)
+    document.documentElement.style.setProperty('--el-color-primary-light-3', color + '40')
+    document.documentElement.style.setProperty('--el-color-primary-light-5', color + '60')
+    document.documentElement.style.setProperty('--el-color-primary-light-7', color + '80')
+    document.documentElement.style.setProperty('--el-color-primary-light-8', color + 'A0')
+    document.documentElement.style.setProperty('--el-color-primary-light-9', color + 'C0')
+    document.documentElement.style.setProperty('--el-color-primary-dark-2', color + 'D0')
+
+    const lightColor = color + '20'
+    document.documentElement.style.setProperty('--theme-color-light', lightColor)
   }
 
   const applyLanguage = (language: string) => {
@@ -53,7 +66,7 @@ export const useUIStore = defineStore('ui', () => {
       if (settings.value) {
         viewMode.value = settings.value.viewMode
         sidebarCollapsed.value = settings.value.sidebarCollapsed
-        applyTheme(settings.value.theme)
+        applyTheme(settings.value.theme, settings.value.themeColor)
         applyLanguage(settings.value.language || 'en')
       }
     } catch (error) {
@@ -77,13 +90,15 @@ export const useUIStore = defineStore('ui', () => {
         viewMode: settings.value.viewMode || 'card',
         sidebarCollapsed: settings.value.sidebarCollapsed ?? false,
         theme: settings.value.theme || 'light',
+        themeColor: settings.value.themeColor || '#3B82F6',
+        useCustomThemeColor: settings.value.useCustomThemeColor ?? false,
         autoFetchIcon: settings.value.autoFetchIcon ?? true,
         language: settings.value.language || 'en',
         faviconService: settings.value.faviconService || DEFAULT_FAVICON_SERVICES,
         useForeignFavicon: settings.value.useForeignFavicon ?? false
       }
       settings.value = await window.electronAPI.updateSettings(settingsData)
-      applyTheme(settings.value.theme)
+      applyTheme(settings.value.theme, settings.value.themeColor)
     } catch (error) {
       if (showError) {
         ElMessage.error(t('message.settingsSaveFailed'))

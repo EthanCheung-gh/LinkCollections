@@ -47,6 +47,42 @@
             <el-option :label="t('settings.languageZh')" value="zh" />
           </el-select>
         </div>
+        <div class="settings-item">
+          <div class="settings-item-content">
+            <div class="settings-item-label">
+              {{ t('settings.themeColor') }}
+            </div>
+            <div class="settings-item-description">
+              {{ t('settings.themeColorDesc') }}
+            </div>
+          </div>
+          <div class="theme-color-options">
+            <div class="theme-color-presets">
+              <div
+                v-for="color in themeColors"
+                :key="color.value"
+                class="theme-color-dot"
+                :class="{
+                  active:
+                    !localSettings.useCustomThemeColor && localSettings.themeColor === color.value
+                }"
+                :style="{ backgroundColor: color.value }"
+                :title="color.name"
+                @click="selectThemeColor(color.value)"
+              />
+            </div>
+            <el-switch
+              v-model="localSettings.useCustomThemeColor"
+              :active-text="t('settings.customColor')"
+            />
+            <el-color-picker
+              v-if="localSettings.useCustomThemeColor"
+              v-model="localSettings.themeColor"
+              show-alpha
+              @change="handleThemeColorChange"
+            />
+          </div>
+        </div>
       </div>
 
       <div class="settings-section">
@@ -210,6 +246,7 @@ import { useUIStore, useBookmarkStore, useFolderStore, useTagStore } from '../..
 import type { Settings } from '../../types'
 import ImportExport from './ImportExport.vue'
 import { DEFAULT_FAVICON_SERVICES } from '../../utils/favicon'
+import { THEME_COLORS } from '../../types/settings'
 
 const { t } = useI18n()
 const uiStore = useUIStore()
@@ -225,6 +262,8 @@ const localSettings = ref<Settings>({
   viewMode: 'card',
   sidebarCollapsed: false,
   theme: 'light',
+  themeColor: '#3B82F6',
+  useCustomThemeColor: false,
   autoFetchIcon: true,
   language: 'en',
   faviconService: DEFAULT_FAVICON_SERVICES,
@@ -234,12 +273,16 @@ const localSettings = ref<Settings>({
 const defaultBrowserName = ref('')
 const defaultBrowserPath = ref('')
 
+const themeColors = THEME_COLORS
+
 const defaultSettings: Settings = {
   defaultBrowser: '',
   availableBrowsers: [],
   viewMode: 'card',
   sidebarCollapsed: false,
   theme: 'light',
+  themeColor: '#3B82F6',
+  useCustomThemeColor: false,
   autoFetchIcon: true,
   language: 'en',
   faviconService: DEFAULT_FAVICON_SERVICES,
@@ -284,7 +327,19 @@ watch(
 
 const handleThemeChange = (value: string) => {
   localSettings.value.theme = value as 'light' | 'dark'
-  applyTheme(value)
+  applyTheme(value, localSettings.value.themeColor)
+}
+
+const selectThemeColor = (color: string) => {
+  localSettings.value.themeColor = color
+  localSettings.value.useCustomThemeColor = false
+  applyTheme(localSettings.value.theme, color)
+}
+
+const handleThemeColorChange = (color: string | null) => {
+  if (color) {
+    applyTheme(localSettings.value.theme, color)
+  }
 }
 
 const handleBrowserChange = (_value: string) => {}
@@ -334,6 +389,8 @@ const saveSettings = async () => {
       viewMode: localSettings.value.viewMode,
       sidebarCollapsed: localSettings.value.sidebarCollapsed,
       theme: localSettings.value.theme,
+      themeColor: localSettings.value.themeColor,
+      useCustomThemeColor: localSettings.value.useCustomThemeColor,
       autoFetchIcon: localSettings.value.autoFetchIcon,
       language: localSettings.value.language
     }
@@ -355,9 +412,22 @@ const handleLanguageChange = (value: string) => {
   applyLanguage(value)
 }
 
-const applyTheme = (theme: string) => {
+const applyTheme = (theme: string, themeColor?: string) => {
   document.documentElement.classList.remove('light', 'dark')
   document.documentElement.classList.add(theme)
+
+  const color = themeColor || '#3B82F6'
+  document.documentElement.style.setProperty('--theme-color', color)
+  document.documentElement.style.setProperty('--el-color-primary', color)
+  document.documentElement.style.setProperty('--el-color-primary-light-3', color + '40')
+  document.documentElement.style.setProperty('--el-color-primary-light-5', color + '60')
+  document.documentElement.style.setProperty('--el-color-primary-light-7', color + '80')
+  document.documentElement.style.setProperty('--el-color-primary-light-8', color + 'A0')
+  document.documentElement.style.setProperty('--el-color-primary-light-9', color + 'C0')
+  document.documentElement.style.setProperty('--el-color-primary-dark-2', color + 'D0')
+
+  const lightColor = color + '20'
+  document.documentElement.style.setProperty('--theme-color-light', lightColor)
 }
 
 const applyLanguage = async (language: string) => {
@@ -371,7 +441,7 @@ const resetToDefaults = async () => {
   try {
     localSettings.value = { ...defaultSettings }
     await saveSettingsToStore()
-    applyTheme('light')
+    applyTheme('light', '#3B82F6')
     ElMessage.success(t('settings.resetSuccess'))
   } catch (error) {
     ElMessage.error(t('message.settingsSaveFailed'))
@@ -418,21 +488,21 @@ onMounted(async () => {
       defaultBrowserPath.value = settings.value.defaultBrowser.path || ''
     }
 
-    applyTheme(settings.value.theme)
+    applyTheme(settings.value.theme, settings.value.themeColor)
     applyLanguage(settings.value.language || 'en')
   } else {
     localSettings.value = {
       ...defaultSettings,
       availableBrowsers: []
     }
-    applyTheme('light')
+    applyTheme('light', '#3B82F6')
     applyLanguage('en')
   }
 })
 
 onActivated(() => {
   if (settings.value) {
-    applyTheme(settings.value.theme)
+    applyTheme(settings.value.theme, settings.value.themeColor)
     applyLanguage(settings.value.language || 'en')
   }
 })
@@ -532,6 +602,35 @@ onActivated(() => {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.theme-color-options {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.theme-color-presets {
+  display: flex;
+  gap: 8px;
+}
+
+.theme-color-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.theme-color-dot:hover {
+  transform: scale(1.1);
+}
+
+.theme-color-dot.active {
+  border-color: var(--el-text-color-primary);
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-5);
 }
 
 @media (max-width: 600px) {

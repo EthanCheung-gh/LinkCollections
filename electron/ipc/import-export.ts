@@ -191,7 +191,7 @@ export function registerImportExportHandlers(): void {
 
       if (format === 'json') {
         const exportData = {
-          version: '1.0.0',
+          version: '1.1.0',
           exportedAt: new Date().toISOString(),
           bookmarks,
           folders,

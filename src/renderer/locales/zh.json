@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "LinkCollection",
-    "version": "版本 1.0.0"
+    "version": "版本 1.1.0"
   },
   "common": {
     "save": "保存",
@@ -81,6 +81,9 @@
     "theme": "主题",
     "themeLight": "浅色",
     "themeDark": "深色",
+    "themeColor": "主题色",
+    "themeColorDesc": "选择您喜欢的主题色",
+    "customColor": "自定义",
     "language": "语言",
     "languageEn": "English",
     "languageZh": "中文",

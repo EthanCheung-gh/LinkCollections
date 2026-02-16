@@ -2,19 +2,10 @@
   <div class="app-container">
     <Sidebar />
     <div class="main-content">
-      <div
-        v-if="currentView === 'bookmarks'"
-        class="bookmarks-view"
-      >
+      <div v-if="currentView === 'bookmarks'" class="bookmarks-view">
         <Header @search="handleSearch" />
-        <CardView
-          v-if="viewMode === 'card'"
-          :search-query="searchQuery"
-        />
-        <ListView
-          v-else
-          :search-query="searchQuery"
-        />
+        <CardView v-if="viewMode === 'card'" :search-query="searchQuery" />
+        <ListView v-else :search-query="searchQuery" />
       </div>
       <StatsView v-else-if="currentView === 'stats'" />
       <SettingsView v-else-if="currentView === 'settings'" />
@@ -97,5 +88,29 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+}
+
+:root {
+  --el-color-primary: #3b82f6;
+  --el-color-primary-light-3: #3b82f640;
+  --el-color-primary-light-5: #3b82f660;
+  --el-color-primary-light-7: #3b82f680;
+  --el-color-primary-light-8: #3b82f6a0;
+  --el-color-primary-light-9: #3b82f6c0;
+  --el-color-primary-dark-2: #3b82f6d0;
+  --theme-color: #3b82f6;
+  --theme-color-light: #3b82f620;
+}
+
+.dark {
+  --el-color-primary: #3b82f6;
+  --el-color-primary-light-3: #3b82f650;
+  --el-color-primary-light-5: #3b82f670;
+  --el-color-primary-light-7: #3b82f690;
+  --el-color-primary-light-8: #3b82f6b0;
+  --el-color-primary-light-9: #3b82f6d0;
+  --el-color-primary-dark-2: #3b82f6e0;
+  --theme-color: #3b82f6;
+  --theme-color-light: #3b82f630;
 }
 </style>
