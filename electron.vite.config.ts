@@ -15,7 +15,7 @@ const PROD_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https://www.google.com https://*.google.com https://*.gstatic.com",
+  "img-src 'self' data: https:",
   "connect-src 'self'",
   "font-src 'self' data:",
   "object-src 'none'",

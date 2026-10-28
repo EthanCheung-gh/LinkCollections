@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Electron](https://img.shields.io/badge/Electron-28.0.0-blue.svg)
 ![Vue](https://img.shields.io/badge/Vue-3.4.0-brightgreen.svg)
@@ -242,10 +242,12 @@ LinkCollections/
 - [ ] 单元测试
 - [ ] E2E 测试
 - [x] 国际化 (i18n)
+- [x] favicon API 切换
+- [x] favicon 缓存
 
 ### 📋 计划中 (v1.2.0+)
 
-- [ ] 更多主题选项
+- [x] 更多主题选项
 - [x] 书签导入/导出
 - [ ] 云端同步
 - [ ] 浏览器插件

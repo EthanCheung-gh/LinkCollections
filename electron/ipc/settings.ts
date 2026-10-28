@@ -19,7 +19,15 @@ interface Settings {
   viewMode: 'card' | 'list'
   sidebarCollapsed: boolean
   theme: 'light' | 'dark'
+  themeColor: string
+  useCustomThemeColor: boolean
   autoFetchIcon: boolean
+  language: 'en' | 'zh'
+  faviconService: {
+    domestic: string
+    foreign: string
+  }
+  useForeignFavicon: boolean
 }
 
 interface OpenBrowserResult {
@@ -35,7 +43,15 @@ const DEFAULT_SETTINGS: Settings = {
   viewMode: 'card',
   sidebarCollapsed: false,
   theme: 'light',
-  autoFetchIcon: true
+  themeColor: '#3B82F6',
+  useCustomThemeColor: false,
+  autoFetchIcon: true,
+  language: 'en',
+  faviconService: {
+    domestic: 'direct',
+    foreign: 'https://www.google.com/s2/favicons'
+  },
+  useForeignFavicon: false
 }
 
 // 只允许把 http(s) 链接交给浏览器/系统外壳

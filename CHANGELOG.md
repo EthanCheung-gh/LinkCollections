@@ -70,21 +70,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2025-02-16
+
+### Added
+
+- Import/Export functionality (JSON and HTML formats)
+- Favicon service options (Domestic/foreign)
+- Multiple theme color options (7 preset colors)
+- Custom theme color support
+- Root domain extraction for favicon
+
+### Improved
+
+- CSP policy updated for favicon services
+
+---
+
 ## [Unreleased]
 
-### Planned Features (v1.1.0)
+### Planned Features (v1.2.0)
 
 - Unit tests for core functionality
 - E2E tests for critical user flows
-- Internationalization (i18n) support
-
-### Planned Features (v1.2.0+)
-
-- Bookmark import/export
 - Cloud sync functionality
 - Browser extension
 - Keyboard shortcuts
 - Batch operations
 - Bookmark grouping
 - Recycle bin functionality
-- More theme options

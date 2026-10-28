@@ -11,8 +11,7 @@
       <p
         v-if="!searchQuery"
         class="empty-hint"
-      >
-        Add a bookmark using button above
+      >        Add a bookmark using button above
       </p>
     </div>
 
@@ -29,27 +28,19 @@
             class="favicon-cell"
             :title="t('bookmark.refreshFavicon')"
             @click="refreshFavicon(row)"
-          >
-            <img
+          >            <img
               v-if="row.favicon"
               :src="row.favicon"
               :alt="row.title"
               class="favicon-small"
               @error="handleFaviconError(row)"
-            >
-            <i
-              v-else
-              class="i-heroicons-globe-alt default-icon-small"
             />
+            <i v-else class="i-heroicons-globe-alt default-icon-small" />
           </div>
         </template>
       </el-table-column>
 
-      <el-table-column
-        prop="title"
-        label="Title"
-        min-width="200"
-      >
+      <el-table-column prop="title" label="Title" min-width="200">
         <template #default="{ row }">
           <div class="title-cell">
             <div
@@ -79,12 +70,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column
-        prop="tags"
-        label="Tags"
-        width="200"
-        class-name="responsive-col"
-      >
+      <el-table-column prop="tags" label="Tags" width="200" class-name="responsive-col">
         <template #default="{ row }">
           <div class="tags-cell">
             <el-tag
@@ -96,20 +82,12 @@
             >
               <span v-html="highlightText(getTagName(tagId), props.searchQuery)" />
             </el-tag>
-            <span
-              v-if="row.tags.length === 0"
-              class="no-tags"
-            >-</span>
+            <span v-if="row.tags.length === 0" class="no-tags">-</span>
           </div>
         </template>
       </el-table-column>
 
-      <el-table-column
-        prop="visitCount"
-        label="Visits"
-        width="80"
-        sortable="custom"
-      >
+      <el-table-column prop="visitCount" label="Visits" width="80" sortable="custom">
         <template #default="{ row }">
           <div class="visits-cell">
             <i class="i-heroicons-chart-bar" />
@@ -123,19 +101,14 @@
         :label="t('bookmark.lastVisited')"
         width="120"
         sortable="custom"
-      >
-        <template #default="{ row }">
+      >        <template #default="{ row }">
           <span class="last-visited-cell">
             {{ row.lastVisited ? formatLastVisited(row.lastVisited) : '-' }}
           </span>
         </template>
       </el-table-column>
 
-      <el-table-column
-        label="Actions"
-        width="100"
-        fixed="right"
-      >
+      <el-table-column label="Actions" width="100" fixed="right">
         <template #default="{ row }">
           <div class="actions-cell">
             <el-dropdown
@@ -183,15 +156,11 @@
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-          </div>
-        </template>
+          </div>        </template>
       </el-table-column>
     </el-table>
 
-    <EditDialog
-      v-model="editDialogVisible"
-      :bookmark="editingBookmark"
-    />
+    <EditDialog v-model="editDialogVisible" :bookmark="editingBookmark" />
   </div>
 </template>
 
@@ -373,7 +342,11 @@ const handleFaviconError = (bookmark: Bookmark) => {
 }
 
 const refreshFavicon = (bookmark: Bookmark) => {
-  const newFavicon = getFaviconUrl(bookmark.url)
+  const newFavicon = getFaviconUrl(
+    bookmark.url,
+    settings.value?.faviconService,
+    settings.value?.useForeignFavicon
+  )
   if (newFavicon) {
     bookmarkStore.updateBookmark(bookmark.id, { favicon: newFavicon }, false)
   }

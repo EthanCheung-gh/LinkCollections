@@ -4,19 +4,25 @@ import type { Settings } from '../types'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { setLanguage } from '../i18n'
+import { DEFAULT_FAVICON_SERVICES } from '../utils/favicon'
 
 /**
- * 与主进程 DEFAULT_SETTINGS（electron/ipc/settings.ts:24-31）保持一致的默认值，
- * 额外包含渲染层独有、主进程按部分合并保存的 `language` 字段。
+ * 与主进程 DEFAULT_SETTINGS（electron/ipc/settings.ts）保持一致的默认值，
+ * 额外包含渲染层独有、主进程按部分合并保存的 `language` 字段，
+ * 以及 v1.1.0 新增的主题色 / favicon 服务配置。
  */
 const DEFAULT_SETTINGS: Settings = {
   theme: 'light',
+  themeColor: '#3B82F6',
+  useCustomThemeColor: false,
   language: 'en',
   viewMode: 'card',
   sidebarCollapsed: false,
   autoFetchIcon: true,
   availableBrowsers: [],
-  defaultBrowser: ''
+  defaultBrowser: '',
+  faviconService: { ...DEFAULT_FAVICON_SERVICES },
+  useForeignFavicon: false
 }
 
 /** 每次返回全新对象/数组，避免多个 store 调用方共享同一份可变引用。 */
@@ -56,9 +62,34 @@ export const useUIStore = defineStore('ui', () => {
     }
   }
 
-  const applyTheme = (theme: string) => {
+  const applyTheme = (theme: string, themeColor?: string) => {
     document.documentElement.classList.remove('light', 'dark')
     document.documentElement.classList.add(theme)
+
+    const color = themeColor || '#3B82F6'
+    document.documentElement.style.setProperty('--theme-color', color)
+    document.documentElement.style.setProperty('--el-color-primary', color)
+    document.documentElement.style.setProperty('--el-color-primary-light-3', color + '40')
+    document.documentElement.style.setProperty('--el-color-primary-light-5', color + '60')
+    document.documentElement.style.setProperty('--el-color-primary-light-7', color + '80')
+    document.documentElement.style.setProperty('--el-color-primary-light-8', color + 'A0')
+    document.documentElement.style.setProperty('--el-color-primary-light-9', color + 'C0')
+    document.documentElement.style.setProperty('--el-color-primary-dark-2', color + 'D0')
+
+    // 自定义主题色必须同时驱动设计变量层（--lc-*），
+    // 否则顶栏主按钮、选中态、focus ring 等使用 --lc-accent 的组件不会跟随换色。
+    document.documentElement.style.setProperty('--lc-accent', color)
+    document.documentElement.style.setProperty(
+      '--lc-accent-hover',
+      `color-mix(in srgb, ${color} 85%, #000)`
+    )
+    document.documentElement.style.setProperty(
+      '--lc-accent-soft',
+      `color-mix(in srgb, ${color} 12%, transparent)`
+    )
+
+    const lightColor = color + '20'
+    document.documentElement.style.setProperty('--theme-color-light', lightColor)
   }
 
   const applyLanguage = (language: string) => {
@@ -72,7 +103,7 @@ export const useUIStore = defineStore('ui', () => {
       if (settings.value) {
         viewMode.value = settings.value.viewMode
         sidebarCollapsed.value = settings.value.sidebarCollapsed
-        applyTheme(settings.value.theme)
+        applyTheme(settings.value.theme, settings.value.themeColor)
         applyLanguage(settings.value.language || 'en')
       }
     } catch (error) {
@@ -95,11 +126,15 @@ export const useUIStore = defineStore('ui', () => {
         viewMode: settings.value.viewMode || 'card',
         sidebarCollapsed: settings.value.sidebarCollapsed ?? false,
         theme: settings.value.theme || 'light',
+        themeColor: settings.value.themeColor || '#3B82F6',
+        useCustomThemeColor: settings.value.useCustomThemeColor ?? false,
         autoFetchIcon: settings.value.autoFetchIcon ?? true,
-        language: settings.value.language || 'en'
+        language: settings.value.language || 'en',
+        faviconService: settings.value.faviconService || DEFAULT_FAVICON_SERVICES,
+        useForeignFavicon: settings.value.useForeignFavicon ?? false
       }
       settings.value = await window.electronAPI.updateSettings(settingsData)
-      applyTheme(settings.value.theme)
+      applyTheme(settings.value.theme, settings.value.themeColor)
     } catch (error) {
       if (showError) {
         ElMessage.error(t('message.settingsSaveFailed'))
@@ -127,8 +162,12 @@ export const useUIStore = defineStore('ui', () => {
         viewMode: defaults.viewMode,
         sidebarCollapsed: defaults.sidebarCollapsed,
         theme: defaults.theme,
+        themeColor: defaults.themeColor,
+        useCustomThemeColor: defaults.useCustomThemeColor,
         autoFetchIcon: defaults.autoFetchIcon,
-        language: defaults.language
+        language: defaults.language,
+        faviconService: { ...defaults.faviconService },
+        useForeignFavicon: defaults.useForeignFavicon
       }
 
       settings.value = defaults
@@ -140,7 +179,7 @@ export const useUIStore = defineStore('ui', () => {
       viewMode.value = savedSettings.viewMode
       sidebarCollapsed.value = savedSettings.sidebarCollapsed
 
-      applyTheme(savedSettings.theme)
+      applyTheme(savedSettings.theme, savedSettings.themeColor)
       applyLanguage(savedSettings.language || 'en')
 
       return savedSettings

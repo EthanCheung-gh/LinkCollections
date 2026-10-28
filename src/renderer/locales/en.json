@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "LinkCollection",
-    "version": "Version 1.0.0"
+    "version": "Version 1.1.0"
   },
   "common": {
     "save": "Save",
@@ -87,6 +87,9 @@
     "theme": "Theme",
     "themeLight": "Light",
     "themeDark": "Dark",
+    "themeColor": "Theme Color",
+    "themeColorDesc": "Choose your preferred accent color",
+    "customColor": "Custom",
     "language": "Language",
     "languageEn": "English",
     "languageZh": "中文",
@@ -99,6 +102,10 @@
     "general": "General",
     "autoFetchFavicon": "Auto-fetch Favicon",
     "autoFetchFaviconDesc": "Automatically fetch website icons when adding bookmarks",
+    "faviconService": "Favicon Service",
+    "faviconServiceDesc": "Choose a service to fetch favicons",
+    "domestic": "Domestic",
+    "foreign": "Foreign",
     "about": "About",
     "dataManagement": "Data Management",
     "clearAllData": "Clear All Data",

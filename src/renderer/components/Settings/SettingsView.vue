@@ -19,10 +19,7 @@
               {{ t('settings.chooseTheme') }}
             </div>
           </div>
-          <el-radio-group
-            v-model="localSettings.theme"
-            @change="handleThemeChange"
-          >
+          <el-radio-group v-model="localSettings.theme" @change="handleThemeChange">
             <el-radio-button value="light">
               {{ t('settings.themeLight') }}
             </el-radio-button>
@@ -46,15 +43,45 @@
             :placeholder="t('settings.language')"
             @change="handleLanguageChange"
           >
-            <el-option
-              :label="t('settings.languageEn')"
-              value="en"
-            />
-            <el-option
-              :label="t('settings.languageZh')"
-              value="zh"
-            />
+            <el-option :label="t('settings.languageEn')" value="en" />
+            <el-option :label="t('settings.languageZh')" value="zh" />
           </el-select>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-content">
+            <div class="settings-item-label">
+              {{ t('settings.themeColor') }}
+            </div>
+            <div class="settings-item-description">
+              {{ t('settings.themeColorDesc') }}
+            </div>
+          </div>
+          <div class="theme-color-options">
+            <div class="theme-color-presets">
+              <div
+                v-for="color in themeColors"
+                :key="color.value"
+                class="theme-color-dot"
+                :class="{
+                  active:
+                    !localSettings.useCustomThemeColor && localSettings.themeColor === color.value
+                }"
+                :style="{ backgroundColor: color.value }"
+                :title="color.name"
+                @click="selectThemeColor(color.value)"
+              />
+            </div>
+            <el-switch
+              v-model="localSettings.useCustomThemeColor"
+              :active-text="t('settings.customColor')"
+            />
+            <el-color-picker
+              v-if="localSettings.useCustomThemeColor"
+              v-model="localSettings.themeColor"
+              show-alpha
+              @change="handleThemeColorChange"
+            />
+          </div>
         </div>
       </div>
 
@@ -72,8 +99,7 @@
               {{ t('settings.primaryBrowser') }}
             </div>
           </div>
-          <div class="browser-inputs control-column">
-            <el-input
+          <div class="browser-inputs control-column">            <el-input
               v-model="defaultBrowserName"
               :placeholder="t('settings.browserName')"
               style="flex: 1"
@@ -118,15 +144,10 @@
                 type="danger"
                 class="browser-remove"
                 @click="removeBrowser(index)"
-              >
-                <i class="i-heroicons-x-mark" />
+              >                <i class="i-heroicons-x-mark" />
               </el-button>
             </div>
-            <el-button
-              text
-              type="primary"
-              @click="addBrowser"
-            >
+            <el-button text type="primary" @click="addBrowser">
               <i class="i-heroicons-plus" />
               {{ t('settings.addBrowser') }}
             </el-button>
@@ -148,10 +169,23 @@
               {{ t('settings.autoFetchFaviconDesc') }}
             </div>
           </div>
-          <el-switch
-            v-model="localSettings.autoFetchIcon"
-            @change="handleAutoFetchChange"
-          />
+          <el-switch v-model="localSettings.autoFetchIcon" @change="handleAutoFetchChange" />
+        </div>
+        <div v-if="localSettings.autoFetchIcon" class="settings-item">
+          <div class="settings-item-content">
+            <div class="settings-item-label">
+              {{ t('settings.faviconService') }}
+            </div>
+            <div class="settings-item-description">
+              {{ t('settings.faviconServiceDesc') }}
+            </div>
+          </div>
+          <el-radio-group v-model="localSettings.useForeignFavicon">
+            <el-radio-button :value="false">
+              {{ t('settings.domestic') }} (自动获取)
+            </el-radio-button>
+            <el-radio-button :value="true">{{ t('settings.foreign') }} (Google) </el-radio-button>
+          </el-radio-group>
         </div>
       </div>
 
@@ -188,10 +222,7 @@
               {{ t('settings.clearAllDataDesc') }}
             </div>
           </div>
-          <el-button
-            type="danger"
-            @click="clearAllData"
-          >
+          <el-button type="danger" @click="clearAllData">
             {{ t('settings.clearAll') }}
           </el-button>
         </div>
@@ -205,8 +236,7 @@
       <el-button
         type="primary"
         @click="saveSettings()"
-      >
-        {{ t('common.save') }}
+      >        {{ t('common.save') }}
       </el-button>
     </div>
   </div>
@@ -220,6 +250,8 @@ import { storeToRefs } from 'pinia'
 import { useUIStore, useBookmarkStore, useFolderStore, useTagStore } from '../../stores'
 import type { Settings } from '../../types'
 import ImportExport from './ImportExport.vue'
+import { DEFAULT_FAVICON_SERVICES } from '../../utils/favicon'
+import { THEME_COLORS } from '../../types/settings'
 
 const { t } = useI18n()
 const uiStore = useUIStore()
@@ -235,12 +267,18 @@ const localSettings = ref<Settings>({
   viewMode: 'card',
   sidebarCollapsed: false,
   theme: 'light',
+  themeColor: '#3B82F6',
+  useCustomThemeColor: false,
   autoFetchIcon: true,
-  language: 'en'
+  language: 'en',
+  faviconService: DEFAULT_FAVICON_SERVICES,
+  useForeignFavicon: false
 })
 
 const defaultBrowserName = ref('')
 const defaultBrowserPath = ref('')
+
+const themeColors = THEME_COLORS
 
 const defaultSettings: Settings = {
   defaultBrowser: '',
@@ -248,8 +286,12 @@ const defaultSettings: Settings = {
   viewMode: 'card',
   sidebarCollapsed: false,
   theme: 'light',
+  themeColor: '#3B82F6',
+  useCustomThemeColor: false,
   autoFetchIcon: true,
-  language: 'en'
+  language: 'en',
+  faviconService: DEFAULT_FAVICON_SERVICES,
+  useForeignFavicon: false
 }
 
 let isSaving = false
@@ -290,7 +332,19 @@ watch(
 
 const handleThemeChange = (value: string) => {
   localSettings.value.theme = value as 'light' | 'dark'
-  applyTheme(value)
+  applyTheme(value, localSettings.value.themeColor)
+}
+
+const selectThemeColor = (color: string) => {
+  localSettings.value.themeColor = color
+  localSettings.value.useCustomThemeColor = false
+  applyTheme(localSettings.value.theme, color)
+}
+
+const handleThemeColorChange = (color: string | null) => {
+  if (color) {
+    applyTheme(localSettings.value.theme, color)
+  }
 }
 
 const handleBrowserChange = (_value: string) => {}
@@ -340,8 +394,13 @@ const saveSettings = async (showSuccess = true): Promise<boolean> => {
       viewMode: localSettings.value.viewMode,
       sidebarCollapsed: localSettings.value.sidebarCollapsed,
       theme: localSettings.value.theme,
+      themeColor: localSettings.value.themeColor,
+      useCustomThemeColor: localSettings.value.useCustomThemeColor,
       autoFetchIcon: localSettings.value.autoFetchIcon,
-      language: localSettings.value.language
+      language: localSettings.value.language,
+      // v1.1.0 的 favicon 服务配置：原实现漏了这两项，导致选择后刷新即丢失
+      faviconService: { ...localSettings.value.faviconService },
+      useForeignFavicon: localSettings.value.useForeignFavicon
     }
 
     const savedSettings = await window.electronAPI.updateSettings(settingsToSave)
@@ -365,9 +424,33 @@ const handleLanguageChange = (value: string) => {
   applyLanguage(value)
 }
 
-const applyTheme = (theme: string) => {
+const applyTheme = (theme: string, themeColor?: string) => {
   document.documentElement.classList.remove('light', 'dark')
   document.documentElement.classList.add(theme)
+
+  const color = themeColor || '#3B82F6'
+  document.documentElement.style.setProperty('--theme-color', color)
+  document.documentElement.style.setProperty('--el-color-primary', color)
+  document.documentElement.style.setProperty('--el-color-primary-light-3', color + '40')
+  document.documentElement.style.setProperty('--el-color-primary-light-5', color + '60')
+  document.documentElement.style.setProperty('--el-color-primary-light-7', color + '80')
+  document.documentElement.style.setProperty('--el-color-primary-light-8', color + 'A0')
+  document.documentElement.style.setProperty('--el-color-primary-light-9', color + 'C0')
+  document.documentElement.style.setProperty('--el-color-primary-dark-2', color + 'D0')
+
+  // 与 stores/ui.ts 的 applyTheme 保持一致：自定义主题色要驱动 --lc-* 变量层
+  document.documentElement.style.setProperty('--lc-accent', color)
+  document.documentElement.style.setProperty(
+    '--lc-accent-hover',
+    `color-mix(in srgb, ${color} 85%, #000)`
+  )
+  document.documentElement.style.setProperty(
+    '--lc-accent-soft',
+    `color-mix(in srgb, ${color} 12%, transparent)`
+  )
+
+  const lightColor = color + '20'
+  document.documentElement.style.setProperty('--theme-color-light', lightColor)
 }
 
 const applyLanguage = async (language: string) => {
@@ -387,7 +470,7 @@ const resetToDefaults = async () => {
   const saved = await saveSettings(false)
   if (!saved) return
 
-  applyTheme(localSettings.value.theme)
+  applyTheme(localSettings.value.theme, localSettings.value.themeColor)
   await applyLanguage(localSettings.value.language)
   ElMessage.success(t('settings.resetSuccess'))
 }
@@ -431,14 +514,14 @@ onMounted(async () => {
       defaultBrowserPath.value = settings.value.defaultBrowser.path || ''
     }
 
-    applyTheme(settings.value.theme)
+    applyTheme(settings.value.theme, settings.value.themeColor)
     applyLanguage(settings.value.language || 'en')
   } else {
     localSettings.value = {
       ...defaultSettings,
       availableBrowsers: []
     }
-    applyTheme('light')
+    applyTheme('light', '#3B82F6')
     applyLanguage('en')
   }
 })
@@ -597,6 +680,35 @@ onMounted(async () => {
 /* EP 默认给相邻按钮加 margin-left，这里统一由 gap 表达 */
 .settings-footer .el-button + .el-button {
   margin-left: 0;
+}
+
+.theme-color-options {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.theme-color-presets {
+  display: flex;
+  gap: 8px;
+}
+
+.theme-color-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.theme-color-dot:hover {
+  transform: scale(1.1);
+}
+
+.theme-color-dot.active {
+  border-color: var(--el-text-color-primary);
+  box-shadow: 0 0 0 2px var(--el-color-primary-light-5);
 }
 
 @media (max-width: 600px) {

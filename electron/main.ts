@@ -35,7 +35,8 @@ const PROD_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https://www.google.com https://*.google.com https://*.gstatic.com",
+  // img-src 需要 `https:`：favicon 服务支持「直连站点 /favicon.ico」与用户自定义服务地址
+  "img-src 'self' data: https:",
   "connect-src 'self'",
   "font-src 'self' data:",
   "object-src 'none'",
@@ -48,7 +49,7 @@ const DEV_CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https://www.google.com https://*.google.com https://*.gstatic.com",
+  "img-src 'self' data: https:",
   "connect-src 'self' https://www.google.com https://*.google.com",
   "font-src 'self' data:",
   "object-src 'none'",
@@ -195,6 +196,10 @@ function createWindow() {
   } else {
     const htmlPath = path.join(__dirname, '../dist/index.html')
     console.log('Loading HTML from:', htmlPath)
+
+    // CSP 统一由 whenReady 里的 installContentSecurityPolicy() 注册（见文件头 PROD_CSP/DEV_CSP），
+    // 这里不能再注册一次：webRequest 同一事件只保留最后一个监听器，
+    // 否则会把生产策略覆盖成开发策略（含 'unsafe-eval'）。
 
     mainWindow.once('ready-to-show', () => {
       mainWindow?.show()

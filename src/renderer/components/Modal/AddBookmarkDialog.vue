@@ -14,37 +14,24 @@
       <el-form-item
         :label="t('form.url')"
         prop="url"
-      >
-        <el-input
+      >        <el-input
           v-model="form.url"
           :placeholder="t('form.placeholder.url')"
           @blur="fetchUrlMetadata"
         >
           <template #append>
-            <el-button
-              :loading="fetching"
-              @click="fetchUrlMetadata"
-            >
+            <el-button :loading="fetching" @click="fetchUrlMetadata">
               <i class="i-heroicons-arrow-path" />
             </el-button>
           </template>
         </el-input>
       </el-form-item>
 
-      <el-form-item
-        :label="t('form.title')"
-        prop="title"
-      >
-        <el-input
-          v-model="form.title"
-          :placeholder="t('form.placeholder.title')"
-        />
+      <el-form-item :label="t('form.title')" prop="title">
+        <el-input v-model="form.title" :placeholder="t('form.placeholder.title')" />
       </el-form-item>
 
-      <el-form-item
-        :label="t('form.description')"
-        prop="description"
-      >
+      <el-form-item :label="t('form.description')" prop="description">
         <el-input
           v-model="form.description"
           type="textarea"
@@ -53,10 +40,7 @@
         />
       </el-form-item>
 
-      <el-form-item
-        :label="t('form.folder')"
-        prop="folderId"
-      >
+      <el-form-item :label="t('form.folder')" prop="folderId">
         <el-select
           v-model="form.folderId"
           clearable
@@ -72,42 +56,25 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item
-        :label="t('form.tags')"
-        prop="tags"
-      >
+      <el-form-item :label="t('form.tags')" prop="tags">
         <el-select
           v-model="form.tags"
           multiple
           :placeholder="t('form.selectTags')"
           style="width: 100%"
         >
-          <el-option
-            v-for="tag in tags"
-            :key="tag.id"
-            :label="tag.name"
-            :value="tag.id"
-          >
+          <el-option v-for="tag in tags" :key="tag.id" :label="tag.name" :value="tag.id">
             <div class="tag-option">
-              <div
-                class="tag-dot"
-                :style="{ backgroundColor: tag.color }"
-              />
+              <div class="tag-dot" :style="{ backgroundColor: tag.color }" />
               <span>{{ tag.name }}</span>
             </div>
           </el-option>
         </el-select>
       </el-form-item>
 
-      <el-form-item
-        :label="t('form.color')"
-        prop="color"
-      >
+      <el-form-item :label="t('form.color')" prop="color">
         <div class="color-picker-wrapper">
-          <el-color-picker
-            v-model="form.color"
-            :predefine="predefineColors"
-          />
+          <el-color-picker v-model="form.color" :predefine="predefineColors" />
           <el-input
             v-model="form.color"
             class="color-input"
@@ -121,11 +88,7 @@
       <el-button @click="handleClose">
         {{ t('common.cancel') }}
       </el-button>
-      <el-button
-        type="primary"
-        :loading="submitting"
-        @click="handleSubmit"
-      >
+      <el-button type="primary" :loading="submitting" @click="handleSubmit">
         {{ t('common.add') }}
       </el-button>
     </template>
@@ -243,7 +206,11 @@ const fetchUrlMetadata = async () => {
 
     const shouldFetch = settings.value?.autoFetchIcon ?? true
     if (shouldFetch && shouldFetchFavicon(normalized)) {
-      form.value.favicon = getFaviconUrl(normalized)
+      form.value.favicon = getFaviconUrl(
+        normalized,
+        settings.value?.faviconService,
+        settings.value?.useForeignFavicon
+      )
     }
   } catch (error) {
     console.warn('[AddBookmarkDialog] Failed to derive metadata:', error)
@@ -278,7 +245,11 @@ const handleSubmit = async () => {
     let favicon = form.value.favicon
 
     if (!favicon && shouldFetch && shouldFetchFavicon(normalizedUrl)) {
-      favicon = getFaviconUrl(normalizedUrl)
+      favicon = getFaviconUrl(
+        normalizedUrl,
+        settings.value?.faviconService,
+        settings.value?.useForeignFavicon
+      )
     }
 
     submitting.value = true
