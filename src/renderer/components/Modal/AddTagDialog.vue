@@ -2,20 +2,21 @@
   <el-dialog
     v-model="dialogVisible"
     :title="t('dialog.addTag')"
-    width="400px"
+    width="var(--lc-dialog-width-md)"
     @close="handleClose"
   >
     <el-form
       ref="formRef"
       :model="form"
       :rules="rules"
-      label-width="80px"
+      label-width="var(--lc-form-label-width)"
     >
       <el-form-item
         :label="t('form.tagName')"
         prop="name"
       >
         <el-input
+          ref="nameInputRef"
           v-model="form.name"
           :placeholder="t('form.placeholder.tagName')"
           @keyup.enter="handleSubmit"
@@ -33,8 +34,8 @@
           />
           <el-input
             v-model="form.color"
+            class="color-input"
             placeholder="#3B82F6"
-            style="width: 120px; margin-left: 12px"
           />
         </div>
       </el-form-item>
@@ -57,7 +58,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { FormInstance, FormRules } from 'element-plus'
+import type { FormInstance, FormRules, InputInstance } from 'element-plus'
 import { useTagStore } from '../../stores'
 
 const { t } = useI18n()
@@ -82,6 +83,7 @@ const dialogVisible = computed({
 })
 
 const formRef = ref<FormInstance>()
+const nameInputRef = ref<InputInstance>()
 const form = ref({
   name: '',
   color: '#3B82F6'
@@ -98,13 +100,18 @@ const predefineColors = [
   '#14B8A6'
 ]
 
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   name: [
-    { required: true, message: 'Please enter tag name', trigger: 'blur' },
-    { min: 1, max: 30, message: 'Name should be 1-30 characters', trigger: 'blur' }
+    { required: true, message: t('validation.pleaseEnterTagName'), trigger: 'blur' },
+    {
+      min: 1,
+      max: 30,
+      message: t('validation.nameLength', { n: 30 }),
+      trigger: 'blur'
+    }
   ],
-  color: [{ required: true, message: 'Please select color', trigger: 'blur' }]
-}
+  color: [{ required: true, message: t('validation.pleaseSelectColor'), trigger: 'blur' }]
+}))
 
 const handleSubmit = async () => {
   if (!formRef.value) return
@@ -129,10 +136,8 @@ watch(
   () => props.modelValue,
   visible => {
     if (visible) {
-      setTimeout(() => {
-        const input = document.querySelector('.el-input__inner') as HTMLInputElement
-        input?.focus()
-      }, 100)
+      // C9：用 el-input 的 ref 聚焦弹窗内的输入框，避免命中外面的输入框
+      setTimeout(() => nameInputRef.value?.focus(), 100)
     }
   }
 )
@@ -142,5 +147,10 @@ watch(
 .color-picker-wrapper {
   display: flex;
   align-items: center;
+  gap: var(--lc-space-3);
+}
+
+.color-input {
+  width: 120px;
 }
 </style>

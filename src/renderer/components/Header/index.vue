@@ -40,7 +40,6 @@ interface Emits {
 }
 
 const { t } = useI18n()
-const props = defineProps<{}>()
 const emit = defineEmits<Emits>()
 
 const folderStore = useFolderStore()
@@ -54,45 +53,71 @@ const handleSearch = (query: string) => {
 </script>
 
 <style scoped>
+/*
+ * 三栏 grid：左右两列同为 minmax(0, 1fr) → 两列等宽，中栏的中心恒等于 .main-content 可用宽度的中心
+ * （审计实测旧 flex 写法左偏 53.6px；根因是 flex:1 的中栏只在「左右列之外的剩余空间」里居中）。
+ * 中栏列宽用 clamp(280px, 34vw, 500px) 而不是固定 500px：窗口最小宽度 1200（electron/main.ts:39）时
+ * 也要给右列（Add 按钮 + 分段控件 ≈ 223px）留够空间，34vw 在 1200 宽时给出 408 的上限。
+ */
 .header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, clamp(280px, 34vw, 500px)) minmax(0, 1fr);
   align-items: center;
-  gap: 24px;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--el-border-color);
+  column-gap: var(--lc-space-4);
+  margin-bottom: var(--lc-space-6);
+  padding-bottom: var(--lc-space-4);
+  border-bottom: 1px solid var(--lc-border-subtle);
 }
 
+/* 标题列可被压缩（省略号截断），不参与和中栏抢宽度 */
 .header-left {
-  flex-shrink: 0;
+  min-width: 0;
 }
 
 .header-center {
-  flex: 1;
   display: flex;
   justify-content: center;
+  min-width: 0;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: var(--lc-space-3);
+  min-width: 0;
+  justify-self: end;
 }
 
 .title {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
   margin: 0;
+  font-size: var(--lc-font-xl);
+  font-weight: var(--lc-weight-semibold);
+  line-height: var(--lc-leading-tight);
+  color: var(--lc-text-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 同行等高：EP 2.13 的 .el-button 写死 height:32px，这里统一到 --lc-control-lg（36px）。
+   排除 .view-btn：分段控件的段高由 ViewToggle 自己的 height:100% 决定（比外框少 2px 边框）。
+   el-button 本身是本模板元素，.add-btn 直接命中即可；:deep() 只用于 EP 内部渲染的节点（见 SearchBox）。 */
+.header-right :deep(.el-button:not(.view-btn)) {
+  min-height: var(--lc-control-lg);
 }
 
 .add-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-weight: 500;
+  height: var(--lc-control-lg);
+  padding: 0 var(--lc-space-4);
+  gap: var(--lc-space-1);
+  border-radius: var(--lc-radius-md);
+  font-weight: var(--lc-weight-medium);
+  transition: background-color var(--lc-duration-fast) var(--lc-ease-standard);
+}
+
+.add-btn:focus-visible {
+  outline: 2px solid var(--lc-accent);
+  outline-offset: 2px;
 }
 </style>

@@ -49,7 +49,11 @@
     "hoursAgo": "{n} 小时前",
     "daysAgo": "{n} 天前",
     "today": "今天",
-    "yesterday": "昨天"
+    "yesterday": "昨天",
+    "empty": "这里还没有书签",
+    "emptyHint": "用上方按钮添加一个",
+    "unknown": "未知",
+    "weeksAgo": "{n} 周前"
   },
   "folder": {
     "title": "文件夹",
@@ -73,7 +77,9 @@
     "placeholder": "搜索书签...",
     "searchShortcut": "按 Ctrl+K 搜索",
     "noResults": "未找到结果",
-    "results": "找到 {count} 个结果"
+    "results": "找到 {count} 个结果",
+    "noMatch": "没有匹配的书签",
+    "recentSearches": "最近搜索"
   },
   "settings": {
     "title": "设置",
@@ -139,22 +145,6 @@
     "visits": "次访问"
   },
   "dialog": {
-    "confirmDelete": "确认删除",
-    "confirmDeleteFolder": "确定要删除此文件夹吗？",
-    "confirmDeleteTag": "确定要删除此标签吗？",
-    "confirmDeleteBookmark": "确定要删除此书签吗？",
-    "confirmClearAll": "此操作将永久删除所有书签、文件夹和标签，且无法撤销。",
-    "deleteWarning": "警告"
-  },
-  "validation": {
-    "required": "此字段为必填项",
-    "invalidUrl": "请输入有效的网址",
-    "maxLength": "最大长度为 {n} 个字符",
-    "pleaseEnterUrl": "请输入网址",
-    "pleaseEnterTitle": "请输入标题",
-    "pleaseSelectFolder": "请选择文件夹"
-  },
-  "dialog": {
     "addBookmark": "添加书签",
     "editBookmark": "编辑书签",
     "addFolder": "添加文件夹",
@@ -166,7 +156,22 @@
     "confirmDeleteTag": "确定要删除此标签吗？",
     "confirmDeleteBookmark": "确定要删除此书签吗？",
     "confirmClearAll": "此操作将永久删除所有书签、文件夹和标签，且无法撤销。",
-    "deleteWarning": "警告"
+    "deleteWarning": "警告",
+    "confirmDeleteBookmarkNamed": "确定删除「{name}」吗？此操作不可撤销。",
+    "confirmDeleteFolderCascade": "该文件夹内的书签将被移动到未分类。"
+  },
+  "validation": {
+    "required": "此字段为必填项",
+    "invalidUrl": "请输入有效的网址",
+    "maxLength": "最大长度为 {n} 个字符",
+    "pleaseEnterUrl": "请输入网址",
+    "pleaseEnterTitle": "请输入标题",
+    "pleaseSelectFolder": "请选择文件夹",
+    "nameLength": "名称长度应为 1-{n} 个字符",
+    "pleaseEnterFolderName": "请输入文件夹名称",
+    "pleaseEnterTagName": "请输入标签名称",
+    "pleaseSelectColor": "请选择颜色",
+    "missingId": "缺少记录 ID"
   },
   "form": {
     "url": "网址",

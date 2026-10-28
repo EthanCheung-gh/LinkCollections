@@ -49,7 +49,11 @@
     "hoursAgo": "{n} h ago",
     "daysAgo": "{n} d ago",
     "today": "Today",
-    "yesterday": "Yesterday"
+    "yesterday": "Yesterday",
+    "empty": "No bookmarks here",
+    "emptyHint": "Add one with the button above",
+    "unknown": "Unknown",
+    "weeksAgo": "{n} w ago"
   },
   "folder": {
     "title": "Folders",
@@ -73,7 +77,9 @@
     "placeholder": "Search bookmarks...",
     "searchShortcut": "Press Ctrl+K to search",
     "noResults": "No results found",
-    "results": "{count} results found"
+    "results": "{count} results found",
+    "noMatch": "No bookmarks match your search",
+    "recentSearches": "Recent searches"
   },
   "settings": {
     "title": "Settings",
@@ -139,22 +145,6 @@
     "visits": "visits"
   },
   "dialog": {
-    "confirmDelete": "Confirm Delete",
-    "confirmDeleteFolder": "Are you sure you want to delete this folder?",
-    "confirmDeleteTag": "Are you sure you want to delete this tag?",
-    "confirmDeleteBookmark": "Are you sure you want to delete this bookmark?",
-    "confirmClearAll": "This will permanently delete all bookmarks, folders, and tags. This action cannot be undone.",
-    "deleteWarning": "Warning"
-  },
-  "validation": {
-    "required": "This field is required",
-    "invalidUrl": "Please enter a valid URL",
-    "maxLength": "Maximum length is {n} characters",
-    "pleaseEnterUrl": "Please enter URL",
-    "pleaseEnterTitle": "Please enter title",
-    "pleaseSelectFolder": "Please select folder"
-  },
-  "dialog": {
     "addBookmark": "Add Bookmark",
     "editBookmark": "Edit Bookmark",
     "addFolder": "Add Folder",
@@ -166,7 +156,22 @@
     "confirmDeleteTag": "Are you sure you want to delete this tag?",
     "confirmDeleteBookmark": "Are you sure you want to delete this bookmark?",
     "confirmClearAll": "This will permanently delete all bookmarks, folders, and tags. This action cannot be undone.",
-    "deleteWarning": "Warning"
+    "deleteWarning": "Warning",
+    "confirmDeleteBookmarkNamed": "Delete \"{name}\"? This cannot be undone.",
+    "confirmDeleteFolderCascade": "Bookmarks in this folder will be moved to uncategorized."
+  },
+  "validation": {
+    "required": "This field is required",
+    "invalidUrl": "Please enter a valid URL",
+    "maxLength": "Maximum length is {n} characters",
+    "pleaseEnterUrl": "Please enter URL",
+    "pleaseEnterTitle": "Please enter title",
+    "pleaseSelectFolder": "Please select folder",
+    "nameLength": "Name should be 1-{n} characters",
+    "pleaseEnterFolderName": "Please enter folder name",
+    "pleaseEnterTagName": "Please enter tag name",
+    "pleaseSelectColor": "Please select color",
+    "missingId": "Missing record ID"
   },
   "form": {
     "url": "URL",

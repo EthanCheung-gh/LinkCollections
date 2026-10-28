@@ -18,6 +18,7 @@ interface Bookmark {
 }
 
 const BOOKMARKS_FILE = 'bookmarks.json'
+const DEFAULT_COLOR = '#3B82F6'
 
 function getBookmarks(): Bookmark[] {
   return readJsonFile<Bookmark[]>(BOOKMARKS_FILE, [])
@@ -25,6 +26,27 @@ function getBookmarks(): Bookmark[] {
 
 function saveBookmarks(bookmarks: Bookmark[]): boolean {
   return writeJsonFile(BOOKMARKS_FILE, bookmarks)
+}
+
+/**
+ * 只接受字符串，其余（`undefined` / `null` / 数字…）折叠为空串。
+ * 这里的「拒收 null」是 B1 的服务端侧防线：`color: null` 落盘会让渲染层的
+ * `hex.slice()` 抛 TypeError。
+ */
+function toSafeString(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+/** 可空字符串归一化：字符串原样返回，`null` 视为「清空」，其余视为「未提供」 */
+function normalizeNullableString(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (value === null) return ''
+  return undefined
+}
+
+function toSafeTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((tag): tag is string => typeof tag === 'string')
 }
 
 export function registerBookmarkHandlers(): void {
@@ -35,20 +57,22 @@ export function registerBookmarkHandlers(): void {
   ipcMain.handle('add-bookmark', (_, bookmarkData: Partial<Bookmark>) => {
     const bookmarks = getBookmarks()
     const now = new Date().toISOString()
+    const input: Partial<Bookmark> = bookmarkData && typeof bookmarkData === 'object' ? bookmarkData : {}
+
+    // 显式白名单赋值：默认值最后生效，任何 `undefined` / `null` 都无法覆盖它
     const newBookmark: Bookmark = {
       id: uuidv4(),
-      url: bookmarkData.url || '',
-      title: bookmarkData.title || bookmarkData.url || '',
-      description: bookmarkData.description || '',
-      favicon: bookmarkData.favicon || '',
-      color: bookmarkData.color || '#3B82F6',
-      folderId: bookmarkData.folderId || '',
-      tags: bookmarkData.tags || [],
+      url: toSafeString(input.url),
+      title: toSafeString(input.title) || toSafeString(input.url),
+      description: toSafeString(input.description),
+      favicon: toSafeString(input.favicon),
+      color: toSafeString(input.color) || DEFAULT_COLOR,
+      folderId: toSafeString(input.folderId),
+      tags: toSafeTags(input.tags),
       visitCount: 0,
       lastVisited: null,
       createdAt: now,
-      updatedAt: now,
-      ...bookmarkData
+      updatedAt: now
     }
 
     bookmarks.push(newBookmark)
@@ -67,14 +91,46 @@ export function registerBookmarkHandlers(): void {
       throw new Error('Bookmark not found')
     }
 
-    bookmarks[index] = {
-      ...bookmarks[index],
-      ...updates,
-      updatedAt: new Date().toISOString()
+    const current = bookmarks[index]
+    const patch: Partial<Bookmark> = updates && typeof updates === 'object' ? updates : {}
+
+    // 同样按字段白名单合并：既不让 `null` 落盘，也不允许改 id/createdAt
+    const next: Bookmark = { ...current, updatedAt: new Date().toISOString() }
+
+    const url = normalizeNullableString(patch.url)
+    if (url !== undefined) next.url = url
+
+    const title = normalizeNullableString(patch.title)
+    if (title !== undefined) next.title = title
+
+    const description = normalizeNullableString(patch.description)
+    if (description !== undefined) next.description = description
+
+    const favicon = normalizeNullableString(patch.favicon)
+    if (favicon !== undefined) next.favicon = favicon
+
+    const folderId = normalizeNullableString(patch.folderId)
+    if (folderId !== undefined) next.folderId = folderId
+
+    const color = normalizeNullableString(patch.color)
+    if (color !== undefined) next.color = color || DEFAULT_COLOR
+
+    if (Array.isArray(patch.tags)) {
+      next.tags = toSafeTags(patch.tags)
     }
 
+    if (typeof patch.visitCount === 'number' && Number.isFinite(patch.visitCount)) {
+      next.visitCount = patch.visitCount
+    }
+
+    if (patch.lastVisited === null || typeof patch.lastVisited === 'string') {
+      next.lastVisited = patch.lastVisited
+    }
+
+    bookmarks[index] = next
+
     if (saveBookmarks(bookmarks)) {
-      return bookmarks[index]
+      return next
     }
     throw new Error('Failed to update bookmark')
   })
@@ -101,15 +157,22 @@ export function registerBookmarkHandlers(): void {
       throw new Error('Bookmark not found')
     }
 
-    bookmarks[index] = {
-      ...bookmarks[index],
-      visitCount: bookmarks[index].visitCount + 1,
-      lastVisited: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+    const current = bookmarks[index]
+    // 存量数据里 visitCount 可能缺失/为 null，直接 `+1` 会写出 NaN
+    const baseCount = Number.isFinite(current.visitCount) ? current.visitCount : 0
+    const now = new Date().toISOString()
+
+    const updated: Bookmark = {
+      ...current,
+      visitCount: baseCount + 1,
+      lastVisited: now,
+      updatedAt: now
     }
 
+    bookmarks[index] = updated
+
     if (saveBookmarks(bookmarks)) {
-      return bookmarks[index]
+      return updated
     }
     throw new Error('Failed to update visit count')
   })

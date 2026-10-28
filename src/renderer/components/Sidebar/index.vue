@@ -84,34 +84,39 @@ const handleSettingsClick = () => {
 .sidebar {
   display: flex;
   flex-direction: column;
-  background-color: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: width 0.3s ease;
-  width: 240px;
-  padding: 16px;
-  max-height: calc(100vh - 32px);
+  width: var(--lc-sidebar-width);
+  /* 唯一横向边距来源：logo / 搜索框 / 分组标题 / 列表项 / 底栏图标共用这条线 */
+  padding: var(--lc-layout-padding);
+  max-height: calc(100vh - var(--lc-layout-padding) * 2);
+  background-color: var(--lc-bg-surface);
+  border-radius: var(--lc-radius-lg);
+  box-shadow: var(--lc-shadow-card);
+  transition: width var(--lc-duration-normal) var(--lc-ease-standard);
 }
 
 .sidebar.collapsed {
-  width: 64px;
+  width: var(--lc-sidebar-collapsed-width);
 }
 
 .sidebar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding: 0 4px;
+  /* 不再叠加横向 padding：折叠按钮右边缘与分组 "+" 共用一条线 */
+  margin-bottom: var(--lc-space-4);
+}
+
+.sidebar.collapsed .sidebar-header {
+  justify-content: center;
 }
 
 .logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--el-color-primary);
+  gap: var(--lc-space-2);
+  font-size: var(--lc-font-lg);
+  font-weight: var(--lc-weight-semibold);
+  color: var(--lc-accent);
 }
 
 .logo i {
@@ -119,54 +124,71 @@ const handleSettingsClick = () => {
 }
 
 .collapse-btn {
-  padding: 8px;
+  padding: 0;
+  width: var(--lc-control-sm);
+  height: var(--lc-control-sm);
+  border-radius: var(--lc-radius-sm);
+  transition: background-color var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .collapse-btn:hover {
-  background-color: var(--el-fill-color-light);
+  background-color: var(--lc-bg-hover);
 }
 
 .sidebar-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
 .sidebar-content::-webkit-scrollbar {
-  width: 4px;
+  width: var(--lc-space-1);
 }
 
 .sidebar-content::-webkit-scrollbar-thumb {
-  background-color: var(--el-fill-color-darker);
-  border-radius: 2px;
+  background-color: var(--lc-border-default);
+  border-radius: var(--lc-radius-pill);
 }
 
 .sidebar-footer {
   display: flex;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 16px;
-  border-top: 1px solid var(--el-border-color);
   align-items: center;
+  gap: var(--lc-space-2);
+  margin-top: auto;
+  padding-top: var(--lc-space-4);
+  border-top: 1px solid var(--lc-border-subtle);
 }
 
+.sidebar.collapsed .sidebar-footer {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* 对称双按钮：等宽等高、内容居中（不再一左一右反向对齐） */
 .footer-btn {
   display: flex;
+  flex: 1;
+  min-width: 0;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  flex: 1;
-  padding: 10px 12px;
-  color: var(--el-text-color-regular);
+  gap: var(--lc-space-1);
+  height: var(--lc-control-md);
+  padding: 0 var(--lc-space-1);
   box-sizing: border-box;
+  border-radius: var(--lc-radius-md);
+  color: var(--lc-text-regular);
+  font-size: var(--lc-font-base);
+  transition: background-color var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
-.footer-btn.left-btn {
-  justify-content: flex-start;
+/* EP 的 .el-button + .el-button 自带 12px margin-left，会破坏对称间距 */
+.sidebar-footer .footer-btn + .footer-btn {
+  margin-left: 0;
 }
 
-.footer-btn.right-btn {
-  justify-content: flex-end;
+.footer-btn:hover {
+  background-color: var(--lc-bg-hover);
 }
 
 .footer-btn .footer-icon {
@@ -176,13 +198,13 @@ const handleSettingsClick = () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
 }
 
 .footer-btn span {
   display: inline-block;
-}
-
-.footer-btn:hover {
-  background-color: var(--el-fill-color-light);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

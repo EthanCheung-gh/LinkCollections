@@ -1,0 +1,124 @@
+/* =============================================================================
+ * Design Tokens（冻结契约 v1 — .openbitfun/analysis/token-contract.md）
+ *
+ * 本文件是整个渲染层的**唯一定义处**，只写变量，不写任何规则选择器样式。
+ * 组件只能消费 `--lc-*`，不得改名、不得自造新变量（新增走契约「v1.1 追加」）。
+ * 浅色默认值在 `:root`，深色覆盖在 `html.dark`（`stores/ui.ts` 与
+ * `SettingsView.vue` 都把 `light` / `dark` 类打在 `<html>` 上）。
+ * ============================================================================= */
+
+:root {
+  /* ---------- 间距（唯一间距标尺，禁止再用 10px/14px/18px 等非标尺值） ---------- */
+  --lc-space-1: 4px;
+  --lc-space-2: 8px;
+  --lc-space-3: 12px;
+  --lc-space-4: 16px;
+  --lc-space-5: 20px;
+  --lc-space-6: 24px;
+  --lc-space-8: 32px;
+
+  /* ---------- 圆角 ---------- */
+  --lc-radius-sm: 6px;
+  --lc-radius-md: 8px;
+  --lc-radius-lg: 12px;
+  --lc-radius-pill: 999px;
+
+  /* ---------- 字号 / 字重 / 行高 ---------- */
+  --lc-font-xs: 12px;
+  --lc-font-sm: 13px;
+  --lc-font-base: 14px;
+  --lc-font-lg: 16px;
+  --lc-font-xl: 20px;
+  --lc-font-2xl: 24px;
+  --lc-weight-regular: 400;
+  --lc-weight-medium: 500;
+  --lc-weight-semibold: 600;
+  --lc-leading-tight: 1.25;
+  --lc-leading-normal: 1.5;
+
+  /* ---------- 控件高度（同一行内所有控件必须等高，这是对齐的关键） ---------- */
+  --lc-control-sm: 28px;
+  --lc-control-md: 32px;
+  --lc-control-lg: 36px;
+
+  /* ---------- 表面 / 底纹 ---------- */
+  --lc-bg-canvas: #f5f6f8;
+  --lc-bg-surface: #ffffff;
+  --lc-bg-subtle: #f7f8fa;
+  --lc-bg-hover: #f2f4f7;
+  --lc-bg-active: #e8eefb;
+
+  /* ---------- 描边 ---------- */
+  --lc-border-subtle: #eef0f3;
+  --lc-border-default: #e3e6eb;
+
+  /* ---------- 文本 ---------- */
+  --lc-text-primary: #1f2937;
+  --lc-text-regular: #4b5563;
+  --lc-text-muted: #8b93a1;
+  --lc-text-inverse: #ffffff;
+
+  /* ---------- 语义色 ---------- */
+  --lc-accent: #3b82f6;
+  --lc-accent-hover: #2f6fe0;
+  --lc-accent-soft: #eff4ff;
+  --lc-success: #67c23a;
+  --lc-warning: #e6a23c;
+  --lc-danger: #f56c6c;
+
+  /* ---------- 阴影 ---------- */
+  --lc-shadow-card: 0 1px 3px rgba(16, 24, 40, .06), 0 1px 2px rgba(16, 24, 40, .04);
+  --lc-shadow-raised: 0 4px 12px rgba(16, 24, 40, .08);
+
+  /* ---------- 布局 ---------- */
+  --lc-sidebar-width: 240px;
+  --lc-sidebar-collapsed-width: 64px;
+  --lc-layout-gap: 16px;
+  --lc-layout-padding: 16px;
+  --lc-header-height: 56px;
+
+  /* ---------- 动效 ---------- */
+  --lc-duration-fast: 150ms;
+  --lc-duration-normal: 250ms;
+  --lc-ease-standard: cubic-bezier(.4, 0, .2, 1);
+
+  /* ---------- v1.1 追加（契约末尾同步登记，禁止再改名） ---------- */
+  /* 6 个 Modal 的 el-form label-width 统一值（容得下中文 5 字 @14px = 70px） */
+  --lc-form-label-width: 88px;
+  /* 弹窗宽度两档：表单类（AddBookmark / Edit）用 lg，简单类（Folder / Tag）用 md */
+  --lc-dialog-width-md: 400px;
+  --lc-dialog-width-lg: 500px;
+}
+
+/* =============================================================================
+ * 深色主题（契约 §2）。只覆盖“表面 / 描边 / 文本 / 强调色 / 阴影”，
+ * 间距、圆角、字号、控件高、动效等与主题无关的变量继承 `:root`。
+ * ============================================================================= */
+
+html.dark {
+  --lc-bg-canvas: #0b0d10;
+  --lc-bg-surface: #16191e;
+  --lc-bg-subtle: #1c2027;
+  --lc-bg-hover: #232830;
+  --lc-bg-active: #1e2a44;
+  --lc-border-subtle: #232830;
+  --lc-border-default: #2f353f;
+  --lc-text-primary: #e8ecf3;
+  --lc-text-regular: #c3c9d4;
+  --lc-text-muted: #8b93a1;
+  --lc-accent: #409eff;
+  --lc-accent-hover: #66b1ff;
+  --lc-accent-soft: #17233a;
+  --lc-shadow-card: 0 1px 3px rgba(0, 0, 0, .4);
+  --lc-shadow-raised: 0 6px 16px rgba(0, 0, 0, .5);
+}
+
+/* 尊重系统「减少动态效果」：所有基于 --lc-duration-* 的过渡/动画归零。
+   组件里只要用 var(--lc-duration-*) 就自动跟随，无需单独写媒体查询。 */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  html.dark {
+    --lc-duration-fast: 0ms;
+    --lc-duration-normal: 0ms;
+  }
+}

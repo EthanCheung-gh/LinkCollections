@@ -17,13 +17,19 @@ export const useSearchStore = defineStore('search', () => {
     }
 
     const lowerQuery = query.value.toLowerCase()
+    // 逐字段 typeof 兜底：存量/导入数据里可能存在 undefined 的 title/url/description/tags
+    // （审计 C15），直接 .toLowerCase()/.includes() 会抛 TypeError 并让整个搜索结果面板崩溃。
+    const matches = (value: string | undefined | null) =>
+      typeof value === 'string' && value.toLowerCase().includes(lowerQuery)
+
     return bookmarkStore.bookmarks.filter(bookmark => {
-      const titleMatch = bookmark.title.toLowerCase().includes(lowerQuery)
-      const urlMatch = bookmark.url.toLowerCase().includes(lowerQuery)
-      const descMatch = bookmark.description.toLowerCase().includes(lowerQuery)
-      
-      const bookmarkTags = tagStore.tags.filter(tag => bookmark.tags.includes(tag.id))
-      const tagMatch = bookmarkTags.some(tag => tag.name.toLowerCase().includes(lowerQuery))
+      const titleMatch = matches(bookmark.title)
+      const urlMatch = matches(bookmark.url)
+      const descMatch = matches(bookmark.description)
+
+      const bookmarkTagIds = Array.isArray(bookmark.tags) ? bookmark.tags : []
+      const bookmarkTags = tagStore.tags.filter(tag => bookmarkTagIds.includes(tag.id))
+      const tagMatch = bookmarkTags.some(tag => matches(tag.name))
 
       return titleMatch || urlMatch || descMatch || tagMatch
     })

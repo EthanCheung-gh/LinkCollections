@@ -4,13 +4,13 @@
       v-if="filteredBookmarks.length === 0"
       class="empty-state"
     >
-      <i class="i-heroicons-list-bullet text-6xl text-gray-300" />
-      <p class="text-gray-500">
-        {{ searchQuery ? 'No bookmarks match your search.' : 'No bookmarks in this folder.' }}
+      <i class="i-heroicons-list-bullet empty-icon" />
+      <p class="empty-title">
+        {{ searchQuery ? t('search.noMatch') : t('bookmark.empty') }}
       </p>
       <p
         v-if="!searchQuery"
-        class="text-gray-400 text-sm mt-2"
+        class="empty-hint"
       >
         Add a bookmark using button above
       </p>
@@ -27,7 +27,7 @@
         <template #default="{ row }">
           <div
             class="favicon-cell"
-            title="Click to refresh favicon"
+            :title="t('bookmark.refreshFavicon')"
             @click="refreshFavicon(row)"
           >
             <img
@@ -93,7 +93,6 @@
               size="small"
               :color="tagBackgroundColor(getTagColor(tagId))"
               effect="plain"
-              style="margin: 2px"
             >
               <span v-html="highlightText(getTagName(tagId), props.searchQuery)" />
             </el-tag>
@@ -121,7 +120,7 @@
 
       <el-table-column
         prop="lastVisited"
-        label="Last Visited"
+        :label="t('bookmark.lastVisited')"
         width="120"
         sortable="custom"
       >
@@ -138,51 +137,53 @@
         fixed="right"
       >
         <template #default="{ row }">
-          <el-dropdown
-            trigger="click"
-            @command="(cmd: string) => handleAction(cmd, row)"
-          >
-            <el-button
-              text
-              size="small"
+          <div class="actions-cell">
+            <el-dropdown
+              trigger="click"
+              @command="(cmd: string) => handleAction(cmd, row)"
             >
-              <i class="i-heroicons-ellipsis-horizontal" />
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="edit">
-                  <i class="i-heroicons-pencil mr-2" />
-                  Edit
-                </el-dropdown-item>
-                <el-dropdown-item command="share">
-                  <i class="i-heroicons-share mr-2" />
-                  Share
-                </el-dropdown-item>
-                <el-dropdown-item
-                  divided
-                  command="open-default"
-                >
-                  <i class="i-heroicons-arrow-top-right-on-square mr-2" />
-                  Open in Default Browser
-                </el-dropdown-item>
-                <el-dropdown-item
-                  v-for="(browser, index) in browsers"
-                  :key="index"
-                  :command="`open-browser-${index}`"
-                >
-                  <i class="i-heroicons-globe-alt mr-2" />
-                  {{ browser.name || `Browser ${index + 1}` }}
-                </el-dropdown-item>
-                <el-dropdown-item
-                  divided
-                  command="delete"
-                >
-                  <i class="i-heroicons-trash mr-2" />
-                  Delete
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+              <el-button
+                text
+                size="small"
+              >
+                <i class="i-heroicons-ellipsis-horizontal" />
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit">
+                    <i class="i-heroicons-pencil mr-2" />
+                    Edit
+                  </el-dropdown-item>
+                  <el-dropdown-item command="share">
+                    <i class="i-heroicons-share mr-2" />
+                    Share
+                  </el-dropdown-item>
+                  <el-dropdown-item
+                    divided
+                    command="open-default"
+                  >
+                    <i class="i-heroicons-arrow-top-right-on-square mr-2" />
+                    Open in Default Browser
+                  </el-dropdown-item>
+                  <el-dropdown-item
+                    v-for="(browser, index) in browsers"
+                    :key="index"
+                    :command="`open-browser-${index}`"
+                  >
+                    <i class="i-heroicons-globe-alt mr-2" />
+                    {{ browser.name || `Browser ${index + 1}` }}
+                  </el-dropdown-item>
+                  <el-dropdown-item
+                    divided
+                    command="delete"
+                  >
+                    <i class="i-heroicons-trash mr-2" />
+                    Delete
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -201,8 +202,10 @@ import { storeToRefs } from 'pinia'
 import { useBookmarkStore, useFolderStore, useTagStore, useUIStore } from '../../stores'
 import { highlightText } from '../../utils/highlight'
 import { getFaviconUrl } from '../../utils/favicon'
+import { isValidColor } from '../../utils/validation'
 import EditDialog from '../Modal/EditDialog.vue'
 import type { Bookmark } from '../../types'
+import { useI18n } from 'vue-i18n'
 
 interface Props {
   searchQuery?: string
@@ -211,6 +214,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   searchQuery: ''
 })
+
+const { t } = useI18n()
 
 const bookmarkStore = useBookmarkStore()
 const folderStore = useFolderStore()
@@ -288,9 +293,9 @@ const handleEdit = (bookmark: Bookmark) => {
 }
 
 const handleShare = (bookmark: Bookmark) => {
-  const text = `网址: ${bookmark.url}\n标题: ${bookmark.title}\n介绍: ${bookmark.description}`
+  const text = `${t('form.url')}: ${bookmark.url}\n${t('form.title')}: ${bookmark.title}\n${t('form.description')}: ${bookmark.description}`
   navigator.clipboard.writeText(text)
-  ElMessage.success('Bookmark copied to clipboard')
+  ElMessage.success(t('bookmark.copySuccess'))
 }
 
 const handleUrlClick = async (bookmark: Bookmark) => {
@@ -304,16 +309,22 @@ const handleUrlClick = async (bookmark: Bookmark) => {
 const handleDelete = async (bookmark: Bookmark) => {
   try {
     await ElMessageBox.confirm(
-      `Are you sure you want to delete "${bookmark.title}"?`,
-      'Delete Bookmark',
+      t('dialog.confirmDeleteBookmarkNamed', { name: bookmark.title }),
+      t('dialog.confirmDelete'),
       {
-        confirmButtonText: 'Delete',
-        cancelButtonText: 'Cancel',
+        confirmButtonText: t('common.delete'),
+        cancelButtonText: t('common.cancel'),
         type: 'warning'
       }
     )
     await deleteBookmark(bookmark.id)
-  } catch (error) {}
+  } catch (error) {
+    // 取消确认时 ElMessageBox 会 reject（'cancel'/'close'），无需提示；
+    // 真正的删除失败已在 store 内 toast 并 rethrow，这里只记录，避免未处理的 rejection。
+    if (error !== 'cancel' && error !== 'close') {
+      console.error('[ListView] Failed to delete bookmark:', error)
+    }
+  }
 }
 
 const handleAction = async (command: string, bookmark: Bookmark) => {
@@ -374,66 +385,86 @@ const formatLastVisited = (date: string) => {
   const diffMs = now.getTime() - visited.getTime()
   const diffMins = Math.floor(diffMs / 60000)
 
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffMins < 1) return t('bookmark.justNow')
+  if (diffMins < 60) return t('bookmark.minutesAgo', { n: diffMins })
 
   const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffHours < 24) return t('bookmark.hoursAgo', { n: diffHours })
 
   const diffDays = Math.floor(diffHours / 24)
-  return `${diffDays}d ago`
+  return t('bookmark.daysAgo', { n: diffDays })
 }
 
 const getTagName = (tagId: string): string => {
-  const tag = tags.value.find(t => t.id === tagId)
-  return tag ? tag.name : 'Unknown'
+  const found = tags.value.find(tag => tag.id === tagId)
+  return found ? found.name : t('bookmark.unknown')
 }
 
 const getTagColor = (tagId: string): string => {
-  const tag = tags.value.find(t => t.id === tagId)
-  return tag ? tag.color : '#3B82F6'
+  const found = tags.value.find(tag => tag.id === tagId)
+  // B1 / C16: tag.color 可能是 null（编辑弹窗 Clear）或非法值，交给 tagBackgroundColor 兜底
+  return found && found.color ? found.color : ''
 }
 
-const tagBackgroundColor = (color: string): string => {
-  const r = parseInt(color.slice(1, 3), 16)
-  const g = parseInt(color.slice(3, 5), 16)
-  const b = parseInt(color.slice(5, 7), 16)
-  return `rgba(${r}, ${g}, ${b}, 0.1)`
+const tagBackgroundColor = (color?: string | null): string => {
+  const safeColor = color && isValidColor(color) ? color : 'var(--lc-accent)'
+  return `color-mix(in srgb, ${safeColor} 10%, transparent)`
 }
 </script>
 
 <style scoped>
 .list-view {
   flex: 1;
+  min-height: 0;
   height: 100%;
-}
-
-.empty-state {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  min-height: 400px;
-  color: var(--el-text-color-secondary);
 }
 
-.empty-state p {
+/* 空态在内容区可用高度内垂直 + 水平居中（不再用 min-height:400px） */
+.empty-state {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--lc-space-4);
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 64px;
+  color: var(--lc-text-muted);
+}
+
+.empty-title {
   margin: 0;
+  font-size: var(--lc-font-lg);
+  color: var(--lc-text-primary);
+  line-height: var(--lc-leading-tight);
+}
+
+.empty-hint {
+  margin: 0;
+  font-size: var(--lc-font-sm);
+  color: var(--lc-text-muted);
+  line-height: var(--lc-leading-normal);
 }
 
 .favicon-cell {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: var(--lc-space-1);
+  border-radius: var(--lc-radius-sm);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  transition: background-color var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .favicon-cell:hover {
-  background-color: var(--el-fill-color-light);
+  background-color: var(--lc-bg-hover);
 }
 
 .favicon-small {
@@ -444,43 +475,44 @@ const tagBackgroundColor = (color: string): string => {
 
 .default-icon-small {
   font-size: 18px;
-  color: var(--el-text-color-secondary);
+  color: var(--lc-text-muted);
 }
 
 .title-cell {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--lc-space-1);
 }
 
 .title {
-  font-weight: 600;
-  color: var(--el-text-color-primary);
+  font-size: var(--lc-font-base);
+  font-weight: var(--lc-weight-medium);
+  color: var(--lc-text-primary);
   cursor: pointer;
-  transition: color 0.2s;
+  transition: color var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .title:hover {
-  color: var(--el-color-primary);
+  color: var(--lc-accent);
 }
 
 .url {
-  font-size: 12px;
-  color: var(--el-color-primary);
+  font-size: var(--lc-font-xs);
+  color: var(--lc-accent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: color var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .url:hover {
-  opacity: 0.7;
+  color: var(--lc-accent-hover);
 }
 
 .description-cell {
-  font-size: 14px;
-  color: var(--el-text-color-regular);
+  font-size: var(--lc-font-sm);
+  color: var(--lc-text-regular);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -489,50 +521,74 @@ const tagBackgroundColor = (color: string): string => {
 .tags-cell {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--lc-space-1);
+}
+
+.tags-cell :deep(.el-tag) {
+  margin: 0;
+  border-radius: var(--lc-radius-pill);
 }
 
 .no-tags {
-  color: var(--el-text-color-secondary);
+  color: var(--lc-text-muted);
 }
 
 .visits-cell {
   display: flex;
   align-items: center;
-  gap: 4px;
-  color: var(--el-text-color-secondary);
+  gap: var(--lc-space-1);
+  color: var(--lc-text-muted);
 }
 
 .last-visited-cell {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+  font-size: var(--lc-font-xs);
+  color: var(--lc-text-muted);
 }
 
 .actions-cell {
   display: flex;
-  gap: 8px;
+  align-items: center;
   justify-content: flex-end;
 }
 
+.actions-cell :deep(.el-button) {
+  min-width: var(--lc-control-sm);
+  height: var(--lc-control-sm);
+  padding: 0;
+}
+
+.actions-cell :deep(.el-button:focus-visible) {
+  outline: 2px solid var(--lc-accent);
+  outline-offset: 2px;
+}
+
+/* 表格皮肤统一走 EP 变量，随之而来的行高 / 分隔线 / 表头全部由 token 驱动 */
 :deep(.el-table) {
-  background-color: transparent;
+  --el-table-bg-color: var(--lc-bg-surface);
+  --el-table-tr-bg-color: var(--lc-bg-surface);
+  --el-table-header-bg-color: var(--lc-bg-subtle);
+  --el-table-border-color: var(--lc-border-subtle);
+  --el-table-row-hover-bg-color: var(--lc-bg-hover);
+  --el-table-header-text-color: var(--lc-text-primary);
+  --el-table-text-color: var(--lc-text-regular);
+  font-size: var(--lc-font-sm);
+}
+
+:deep(.el-table th.el-table__cell),
+:deep(.el-table td.el-table__cell) {
+  height: var(--lc-control-lg);
+  border-bottom: 1px solid var(--lc-border-subtle);
+}
+
+:deep(.el-table th.el-table__cell) {
+  background-color: var(--lc-bg-subtle);
+  font-size: var(--lc-font-sm);
+  font-weight: var(--lc-weight-medium);
+  color: var(--lc-text-primary);
 }
 
 :deep(.el-table__row) {
-  transition: background-color 0.2s;
-}
-
-:deep(.el-table__row:hover) {
-  background-color: var(--el-fill-color-light);
-}
-
-:deep(.el-table__header) {
-  background-color: var(--el-fill-color-lighter);
-}
-
-:deep(.el-table__header th) {
-  background-color: transparent;
-  font-weight: 600;
+  transition: background-color var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 @media (max-width: 1200px) {
@@ -543,22 +599,13 @@ const tagBackgroundColor = (color: string): string => {
 
 @media (max-width: 900px) {
   :deep(.el-table-column--selection .cell) {
-    padding-left: 4px;
-    padding-right: 4px;
+    padding-left: var(--lc-space-1);
+    padding-right: var(--lc-space-1);
   }
 
   .visits-cell,
   .last-visited-cell {
-    font-size: 11px;
-  }
-
-  .actions-cell {
-    gap: 4px;
-  }
-
-  .actions-cell .el-button {
-    padding: 4px 6px;
-    font-size: 12px;
+    font-size: var(--lc-font-xs);
   }
 }
 
@@ -571,14 +618,6 @@ const tagBackgroundColor = (color: string): string => {
     min-width: 600px;
   }
 
-  .title {
-    font-size: 14px;
-  }
-
-  .url {
-    font-size: 11px;
-  }
-
   :deep(.last-visited),
   :deep(.visits-cell) {
     display: none;
@@ -586,10 +625,10 @@ const tagBackgroundColor = (color: string): string => {
 }
 
 :deep(mark) {
-  background-color: #fef08a;
+  background-color: color-mix(in srgb, var(--lc-warning) 35%, transparent);
   color: inherit;
-  padding: 0 2px;
-  border-radius: 2px;
-  font-weight: 600;
+  padding: 0 var(--lc-space-1);
+  border-radius: var(--lc-radius-sm);
+  font-weight: var(--lc-weight-semibold);
 }
 </style>

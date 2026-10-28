@@ -2,14 +2,14 @@
   <el-dialog
     v-model="dialogVisible"
     :title="t('dialog.editFolder')"
-    width="400px"
+    width="var(--lc-dialog-width-md)"
     @close="handleClose"
   >
     <el-form
       ref="formRef"
       :model="form"
       :rules="rules"
-      label-width="80px"
+      label-width="var(--lc-form-label-width)"
     >
       <el-form-item
         :label="t('form.folderName')"
@@ -30,8 +30,8 @@
           />
           <el-input
             v-model="form.color"
+            class="color-input"
             placeholder="#3B82F6"
-            style="width: 120px; margin-left: 12px"
           />
         </div>
       </el-form-item>
@@ -55,7 +55,6 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { FormInstance, FormRules } from 'element-plus'
-import { useFolderStore } from '../../stores'
 import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
@@ -72,9 +71,6 @@ interface Emits {
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
-
-const folderStore = useFolderStore()
-const { updateFolder } = folderStore
 
 const dialogVisible = computed({
   get: () => props.modelValue,
@@ -99,39 +95,39 @@ const predefineColors = [
   '#14B8A6'
 ]
 
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   name: [
-    { required: true, message: 'Please enter folder name', trigger: 'blur' },
-    { min: 1, max: 50, message: 'Name should be 1-50 characters', trigger: 'blur' }
+    { required: true, message: t('validation.pleaseEnterFolderName'), trigger: 'blur' },
+    {
+      min: 1,
+      max: 50,
+      message: t('validation.nameLength', { n: 50 }),
+      trigger: 'blur'
+    }
   ]
-}
+}))
 
 const handleSubmit = async () => {
   if (!formRef.value) return
 
   try {
     await formRef.value.validate()
-
-    const updates = {
-      name: form.value.name,
-      color: form.value.color
-    }
-
-    if (!form.value.id) {
-      ElMessage.error('Folder ID is missing')
-      return
-    }
-
-    await updateFolder(form.value.id, updates)
-
-    emit('updated', updates)
-
-    ElMessage.success('Folder updated successfully')
-    handleClose()
-  } catch (error) {
-    console.error('EditFolderDialog - Error updating folder:', error)
-    ElMessage.error('Failed to update folder')
+  } catch {
+    return
   }
+
+  // B4：弹窗只负责收集与校验，真正的写库 + 关闭 + 提示由父组件（FolderList.handleFolderUpdate）
+  // 统一执行。此处不得再调用 store 或自行弹 toast，否则每次编辑会写两次库、弹三条成功提示。
+  if (!form.value.id) {
+    ElMessage.error(t('validation.missingId'))
+    return
+  }
+
+  emit('updated', {
+    name: form.value.name,
+    color: form.value.color
+  })
+  handleClose()
 }
 
 const handleClose = () => {
@@ -162,5 +158,10 @@ watch(
 .color-picker-wrapper {
   display: flex;
   align-items: center;
+  gap: var(--lc-space-3);
+}
+
+.color-input {
+  width: 120px;
 }
 </style>

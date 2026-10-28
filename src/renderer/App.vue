@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useUIStore, useBookmarkStore, useFolderStore, useTagStore } from './stores'
 import { defineAsyncComponent } from 'vue'
@@ -44,30 +44,56 @@ const { currentView, viewMode } = storeToRefs(uiStore)
 
 const searchQuery = ref('')
 
+// C5：顶栏搜索只保留这一条过滤链路 —— Header emit → 本 ref → CardView/ListView 的 searchQuery prop。
+// 这里刻意不写 searchStore：searchStore.query 是侧栏 SearchResults 面板的独立数据源（额外匹配标签名），
+// 若在此同步写入，同一关键词会同时产出「主列表（不匹配标签名）」与「侧栏面板（匹配标签名）」两套结果，
+// 即审计描述的双重过滤/结果不一致。保持单一来源即可，不重构数据流。
 const handleSearch = (query: string) => {
   searchQuery.value = query
 }
 
-const handleKeydown = (e: KeyboardEvent) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-    e.preventDefault()
-    const searchBar = document.querySelector('.search-bar input') as HTMLInputElement
-    if (searchBar) {
-      searchBar.focus()
-    }
+// Header 只在 bookmarks 视图渲染，SearchBox 内部持有自己的本地 ref；切走时清空本 ref，
+// 避免回到 bookmarks 时出现「搜索框为空但列表仍被旧关键词过滤」（用户感知为丢结果）。
+watch(currentView, view => {
+  if (view !== 'bookmarks') {
+    searchQuery.value = ''
   }
+})
+
+// C4：Ctrl/Cmd+K 聚焦顶栏搜索框（用户看到的那个搜索框），不再聚焦侧栏 SearchBar。
+// 选择器方案的取舍见交付报告：Header 是 v-if 渲染，非 bookmarks 视图下选择器自然返回 null；
+// 同时避免 App → Header → SearchBox 三层 ref/defineExpose 链在 Vue 3.4 下引入新的类型风险。
+const focusHeaderSearch = () => {
+  const input = document.querySelector<HTMLInputElement>('.search-box input')
+  input?.focus()
 }
 
-onMounted(async () => {
-  try {
-    await bookmarkStore.fetchBookmarks()
-    await folderStore.fetchFolders()
-    await tagStore.fetchTags()
-    await uiStore.fetchSettings()
-    window.addEventListener('keydown', handleKeydown)
-  } catch (error) {
-    console.error('Error during app mount:', error)
-  }
+const handleKeydown = (e: KeyboardEvent) => {
+  if (!(e.ctrlKey || e.metaKey) || e.key !== 'k') return
+  // stats/settings 视图没有 Header：不聚焦、也不 preventDefault，交给其它处理器
+  if (currentView.value !== 'bookmarks') return
+
+  e.preventDefault()
+  focusHeaderSearch()
+}
+
+onMounted(() => {
+  // C6：快捷键注册先于任何 await，且与数据加载解耦（uiStore.fetchSettings 失败也不会吞掉监听）
+  window.addEventListener('keydown', handleKeydown)
+
+  // C6：4 次 IPC 并行发起；allSettled 不会因单个 reject 中断其余任务
+  void Promise.allSettled([
+    bookmarkStore.fetchBookmarks(),
+    folderStore.fetchFolders(),
+    tagStore.fetchTags(),
+    uiStore.fetchSettings()
+  ]).then(results => {
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`Initial data load failed (task #${index}):`, result.reason)
+      }
+    })
+  })
 })
 
 onUnmounted(() => {
@@ -78,24 +104,36 @@ onUnmounted(() => {
 <style scoped>
 .app-container {
   display: flex;
-  gap: 16px;
-  padding: 16px;
+  gap: var(--lc-layout-gap);
+  padding: var(--lc-layout-padding);
   height: 100vh;
-  background-color: var(--el-bg-color-page);
+  background-color: var(--lc-bg-canvas);
 }
 
+/* 页面外边距的唯一来源（ui-pages / ui-bookmark 不要再给页面根节点加 padding，否则叠加成 32） */
 .main-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  padding: var(--lc-layout-padding);
   overflow: hidden;
+  /* 显式声明：不允许出现横向滚动条（子元素越界一律裁切，宽度问题在各自组件内修正） */
+  overflow-x: hidden;
+  /*
+   * 这里不写 scrollbar-gutter: stable —— .main-content 不是滚动容器（overflow: hidden），
+   * Chrome 实测会给它单侧预留 15px gutter（宽度 200 → clientWidth 185），
+   * 结果是右侧留白 16+15=31 vs 左侧 16，直接违反对齐规则 3（左右 gutter 相等）。
+   * scrollbar-gutter 应交给真正的滚动容器：.card-grid（C-ui-bookmark T1）与页面根节点（C-ui-pages T1/T10）。
+   */
 }
 
 .bookmarks-view {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 </style>

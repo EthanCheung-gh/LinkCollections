@@ -2,12 +2,12 @@
   <el-dialog
     v-model="dialogVisible"
     :title="t('dialog.editBookmark')"
-    width="500px"
+    width="var(--lc-dialog-width-lg)"
   >
     <el-form
       ref="formRef"
       :model="form"
-      label-width="80px"
+      label-width="var(--lc-form-label-width)"
     >
       <el-form-item :label="t('form.title')">
         <el-input v-model="form.title" />
@@ -24,6 +24,7 @@
       <el-form-item :label="t('form.folder')">
         <el-select
           v-model="form.folderId"
+          clearable
           style="width: 100%"
         >
           <el-option
@@ -106,13 +107,26 @@ const form = ref({
   color: '#3B82F6'
 })
 
-const handleSubmit = () => {
+const handleSubmit = async () => {
   if (!formRef.value) return
 
-  formRef.value.validate().then(() => {
-    bookmarkStore.updateBookmark(props.bookmark.id, form.value)
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
+
+  // B1：el-color-picker 被清空时会给出 null/空串。null 一旦落库，渲染层的取色逻辑
+  // （BookmarkCard/ListView 依赖 color.slice/hexToRgba）就会崩溃，所以写入侧必须兜底。
+  const color = form.value.color ? String(form.value.color) : '#3B82F6'
+
+  // C17：必须 await —— 失败时保持弹窗打开，避免「先关闭再报错」以及未处理的 Promise rejection
+  try {
+    await bookmarkStore.updateBookmark(props.bookmark.id, { ...form.value, color })
     handleClose()
-  })
+  } catch (error) {
+    console.error('[EditDialog] Failed to update bookmark:', error)
+  }
 }
 
 const handleClose = () => {

@@ -1,12 +1,12 @@
 <template>
   <div
     class="bookmark-card"
-    :style="{ background: cardGradient }"
+    :style="{ '--card-accent': cardAccent }"
   >
     <div class="card-header">
       <div
         class="favicon-wrapper"
-        title="Click to refresh favicon"
+        :title="t('bookmark.refreshFavicon')"
         @click="refreshFavicon"
       >
         <img
@@ -54,7 +54,7 @@
         v-for="tag in bookmarkTags"
         :key="tag.id"
         class="tag"
-        :style="{ backgroundColor: tagBackgroundColor(tag.color), color: tag.color }"
+        :style="{ backgroundColor: tagBackgroundColor(tag.color), color: tagTextColor(tag.color) }"
         @click.stop
       >
         {{ tag.name }}
@@ -123,13 +123,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import type { Bookmark, Tag } from '../../types'
 import { useBookmarkStore, useTagStore, useUIStore } from '../../stores'
 import { highlightText } from '../../utils/highlight'
 import { getFaviconUrl } from '../../utils/favicon'
-import EditDialog from '../Modal/EditDialog.vue'
+import { isValidColor } from '../../utils/validation'
 
 interface Props {
   bookmark: Bookmark
@@ -144,6 +145,8 @@ const props = withDefaults(defineProps<Props>(), {
   searchQuery: ''
 })
 const emit = defineEmits<Emits>()
+
+const { t } = useI18n()
 
 const bookmarkStore = useBookmarkStore()
 const tagStore = useTagStore()
@@ -175,54 +178,32 @@ const highlightedUrl = computed(() => {
   return highlightText(props.bookmark.url, props.searchQuery)
 })
 
-const hexToRgba = (hex: string, alpha: number): string => {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+// B1 / C16: `color` 可能被持久化成 null 或非法值（编辑弹窗 Clear / show-alpha），
+// 统一做空值 + 格式兜底，回退到 --lc-accent。
+const safeColor = (color?: string | null): string => {
+  return color && isValidColor(color) ? color : 'var(--lc-accent)'
 }
 
-const cardGradient = computed(() => {
-  const color = props.bookmark.color || '#3B82F6'
-  return `linear-gradient(135deg, ${hexToRgba(color, 0.09)} 0%, ${hexToRgba(color, 0.15)} 100%)`
-})
+const cardAccent = computed(() => safeColor(props.bookmark.color))
 
-const tagBackgroundColor = (color: string): string => {
-  return hexToRgba(color, 0.13)
+const tagBackgroundColor = (color?: string | null): string => {
+  return `color-mix(in srgb, ${safeColor(color)} 13%, transparent)`
 }
 
-const formatLastVisited = (date: string) => {
-  const now = new Date()
-  const visited = new Date(date)
-  const diffMs = now.getTime() - visited.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-
-  if (diffMins < 1) return 'Just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-
-  const diffHours = Math.floor(diffMins / 60)
-  if (diffHours < 24) return `${diffHours}h ago`
-
-  const diffDays = Math.floor(diffHours / 24)
-  return `${diffDays}d ago`
-}
+const tagTextColor = (color?: string | null): string => safeColor(color)
 
 const formatLastVisitedDate = (date: string) => {
   const visited = new Date(date)
   const now = new Date()
   const diffDays = Math.floor((now.getTime() - visited.getTime()) / (1000 * 60 * 60 * 24))
 
-  if (diffDays === 0) return '今天'
-  if (diffDays === 1) return '昨天'
+  if (diffDays === 0) return t('bookmark.today')
+  if (diffDays === 1) return t('bookmark.yesterday')
 
   const year = visited.getFullYear()
   const month = String(visited.getMonth() + 1).padStart(2, '0')
   const day = String(visited.getDate()).padStart(2, '0')
   return `${year}/${month}/${day}`
-}
-
-const handleCardClick = () => {
-  handleUrlClick()
 }
 
 const handleUrlClick = async () => {
@@ -246,12 +227,8 @@ const refreshFavicon = () => {
   }
 }
 
-const handleEdit = () => {
-  emit('edit', props.bookmark)
-}
-
 const handleShare = () => {
-  const text = `网址: ${props.bookmark.url}\n标题: ${props.bookmark.title}\n介绍: ${props.bookmark.description}`
+  const text = `${t('form.url')}: ${props.bookmark.url}\n${t('form.title')}: ${props.bookmark.title}\n${t('form.description')}: ${props.bookmark.description}`
   navigator.clipboard.writeText(text)
 }
 
@@ -267,8 +244,7 @@ const handleMoreAction = async (command: string) => {
   }
 
   if (command === 'share') {
-    const text = `网址: ${props.bookmark.url}\n标题: ${props.bookmark.title}\n介绍: ${props.bookmark.description}`
-    navigator.clipboard.writeText(text)
+    handleShare()
     return
   }
 
@@ -301,44 +277,52 @@ const handleMoreAction = async (command: string) => {
 
 <style scoped>
 .bookmark-card {
-  background-color: #ffffff;
-  border-radius: 6px;
-  padding: 6px;
-  padding-bottom: 4px;
-  cursor: pointer;
-  transition: all 0.3s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   position: relative;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding: var(--lc-space-4);
+  border: 1px solid var(--lc-border-subtle);
+  border-radius: var(--lc-radius-lg);
+  background-color: var(--lc-bg-surface);
+  /* 色相层：只用变量 + color-mix，深色下随 --lc-bg-surface 自动变暗，
+     不再用行内 background 渐变（会被深色全局覆盖压掉） */
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--card-accent, var(--lc-accent)) 6%, var(--lc-bg-surface)),
+    color-mix(in srgb, var(--card-accent, var(--lc-accent)) 12%, var(--lc-bg-surface))
+  );
+  box-shadow: var(--lc-shadow-card);
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    box-shadow var(--lc-duration-fast) var(--lc-ease-standard),
+    transform var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .bookmark-card:hover {
+  box-shadow: var(--lc-shadow-raised);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 .card-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 5px;
+  gap: var(--lc-space-3);
+  margin-bottom: var(--lc-space-3);
 }
 
 .favicon-wrapper {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.8);
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: var(--lc-radius-pill);
+  background-color: var(--lc-bg-subtle);
   overflow: hidden;
   cursor: pointer;
-  transition: transform 0.2s;
-  flex-shrink: 0;
+  transition: transform var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .favicon-wrapper:hover {
@@ -346,280 +330,132 @@ const handleMoreAction = async (command: string) => {
 }
 
 .favicon {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
 .default-icon {
-  font-size: 16px;
-  color: var(--el-text-color-secondary);
+  font-size: 18px;
+  color: var(--lc-text-muted);
 }
 
 .last-visited {
-  font-size: 9px;
-  color: var(--el-text-color-secondary);
-  background-color: rgba(255, 255, 255, 0.6);
-  padding: 2px 6px;
-  border-radius: 12px;
-  display: inline-block;
+  margin-left: auto;
+  padding: var(--lc-space-1) var(--lc-space-2);
+  border-radius: var(--lc-radius-pill);
+  background-color: var(--lc-bg-subtle);
+  color: var(--lc-text-muted);
+  font-size: var(--lc-font-xs);
+  line-height: var(--lc-leading-tight);
   white-space: nowrap;
 }
 
-html.dark .last-visited {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #e5eaf3;
-}
-
 .card-body {
-  margin-bottom: 5px;
+  margin-bottom: var(--lc-space-3);
 }
 
 .url-link {
   display: block;
-  color: var(--el-color-primary);
-  font-size: 10px;
+  margin-bottom: var(--lc-space-1);
+  color: var(--lc-text-muted);
+  font-size: var(--lc-font-xs);
   text-decoration: none;
-  margin-bottom: 3px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .url-link:hover {
+  color: var(--lc-accent);
   text-decoration: underline;
 }
 
-.url-link:active {
-  color: var(--el-color-primary-dark-2);
-}
-
 .title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  margin: 0 0 3px 0;
+  margin: 0 0 var(--lc-space-1);
+  color: var(--lc-text-primary);
+  font-size: var(--lc-font-base);
+  font-weight: var(--lc-weight-medium);
+  line-height: var(--lc-leading-tight);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .description {
-  font-size: 11px;
-  color: var(--el-text-color-regular);
   margin: 0;
+  color: var(--lc-text-muted);
+  font-size: var(--lc-font-sm);
+  line-height: var(--lc-leading-normal);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  line-height: 1.3;
 }
 
+/* 常规流排布，避免与 favicon / 最近访问时间抢右上角 */
 .card-tags {
-  position: absolute;
-  top: 4px;
-  right: 4px;
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 3px;
-  max-width: calc(100% - 36px);
+  gap: var(--lc-space-1);
+  margin-top: var(--lc-space-2);
 }
 
 .tag {
-  font-size: 8px;
-  padding: 2px 5px;
-  border-radius: 5px;
-  font-weight: 500;
+  padding: var(--lc-space-1);
+  border-radius: var(--lc-radius-sm);
+  font-size: var(--lc-font-xs);
+  font-weight: var(--lc-weight-medium);
+  line-height: var(--lc-leading-tight);
 }
 
 .card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  gap: var(--lc-space-2);
   margin-top: auto;
-  padding-top: 4px;
-  padding-bottom: 0px;
+  padding-top: var(--lc-space-2);
+  border-top: 1px solid var(--lc-border-subtle);
 }
 
 .visit-count {
   display: flex;
   align-items: center;
-  gap: 2px;
-  font-size: 10px;
-  color: var(--el-text-color-secondary);
+  gap: var(--lc-space-1);
+  color: var(--lc-text-muted);
+  font-size: var(--lc-font-xs);
 }
 
 .actions {
   display: flex;
-  gap: 3px;
   align-items: center;
+  gap: var(--lc-space-1);
 }
 
 .action-btn {
-  padding: 2px 4px;
+  width: var(--lc-control-sm);
+  height: var(--lc-control-sm);
+  padding: 0;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
-.bookmark-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 0px;
-}
-
-.favicon-wrapper {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform 0.2s;
-  flex-shrink: 0;
-}
-
-.favicon-wrapper:hover {
-  transform: scale(1.05);
-}
-
-.favicon {
-  width: 18px;
-  height: 18px;
-  object-fit: contain;
-}
-
-.default-icon {
-  font-size: 16px;
-  color: var(--el-text-color-secondary);
-}
-
-.last-visited {
-  font-size: 8px;
-  color: var(--el-text-color-secondary);
-  background-color: rgba(255, 255, 255, 0.6);
-  padding: 1px 5px;
-  border-radius: 10px;
-  display: inline-block;
-  white-space: nowrap;
-}
-
-html.dark .last-visited {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #e5eaf3;
-}
-
-.card-body {
-  margin-bottom: 0px;
-}
-
-.url-link {
-  display: block;
-  color: var(--el-color-primary);
-  font-size: 9px;
-  text-decoration: none;
-  margin-bottom: 0px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.url-link:hover {
-  text-decoration: underline;
-}
-
-.title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  margin: 0 0 0px 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.description {
-  font-size: 10px;
-  color: var(--el-text-color-regular);
-  margin: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  line-height: 1.15;
-  min-height: 35px;
-}
-
-.card-tags {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 2px;
-  max-width: calc(100% - 32px);
-}
-
-.tag {
-  font-size: 8px;
-  padding: 1px 3px;
-  border-radius: 4px;
-  font-weight: 500;
-}
-
-.card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-top: 1px solid rgba(0, 0, 0, 0.05);
-  margin-top: auto;
-  padding-top: 0px;
-}
-
-.visit-count {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  font-size: 9px;
-  color: var(--el-text-color-secondary);
-}
-
-.actions {
-  display: flex;
-  gap: 0px;
-}
-
-.action-btn {
-  padding: 0px 1px;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.bookmark-card:hover .action-btn {
+.bookmark-card:hover .action-btn,
+.action-btn:focus-visible {
   opacity: 1;
 }
 
 .action-btn:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--lc-bg-hover);
 }
 
 :deep(mark) {
-  background-color: #fef08a;
+  background-color: color-mix(in srgb, var(--lc-warning) 35%, transparent);
   color: inherit;
-  padding: 0 2px;
-  border-radius: 2px;
-  font-weight: 600;
+  padding: 0 var(--lc-space-1);
+  border-radius: var(--lc-radius-sm);
+  font-weight: var(--lc-weight-semibold);
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <div class="stats-view">
     <h1 class="stats-title">
-      Statistics
+      {{ t('stats.title') }}
     </h1>
 
     <div class="stats-cards">
@@ -14,7 +14,7 @@
             {{ totalBookmarks }}
           </div>
           <div class="stat-label">
-            Total Bookmarks
+            {{ t('stats.totalBookmarks') }}
           </div>
         </div>
       </div>
@@ -28,7 +28,7 @@
             {{ totalFolders }}
           </div>
           <div class="stat-label">
-            Folders
+            {{ t('stats.totalFolders') }}
           </div>
         </div>
       </div>
@@ -42,7 +42,7 @@
             {{ totalTags }}
           </div>
           <div class="stat-label">
-            Tags
+            {{ t('stats.totalTags') }}
           </div>
         </div>
       </div>
@@ -65,7 +65,7 @@
     <div class="stats-charts">
       <div class="chart-section">
         <h2 class="section-title">
-          Bookmarks by Folder
+          {{ t('stats.folderDistribution') }}
         </h2>
         <div
           ref="folderChartRef"
@@ -87,7 +87,7 @@
     <div class="stats-lists">
       <div class="list-section">
         <h2 class="section-title">
-          Most Visited
+          {{ t('stats.mostVisited') }}
         </h2>
         <div class="list-items">
           <div
@@ -152,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
 import { storeToRefs } from 'pinia'
@@ -170,6 +170,21 @@ const folderChartRef = ref<HTMLElement>()
 const tagChartRef = ref<HTMLElement>()
 let folderChart: echarts.ECharts | null = null
 let tagChart: echarts.ECharts | null = null
+let chartResizeObserver: ResizeObserver | null = null
+let windowResizeBound = false
+
+// 图表颜色必须由 canvas 消费，无法写在样式里 —— 统一从冻结的 lc 变量读取
+const readCssVar = (name: string, fallback: string): string => {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return value || fallback
+}
+
+const chartPalette = (): string[] => [
+  readCssVar('--lc-accent', '#3b82f6'),
+  readCssVar('--lc-success', '#67c23a'),
+  readCssVar('--lc-warning', '#e6a23c'),
+  readCssVar('--lc-danger', '#f56c6c')
+]
 
 const totalBookmarks = computed(() => bookmarks.value.length)
 const totalFolders = computed(() => folders.value.length)
@@ -207,10 +222,10 @@ const formatDate = (date: string) => {
   const diffMs = now.getTime() - d.getTime()
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return `${diffDays} days ago`
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
+  if (diffDays === 0) return t('bookmark.today')
+  if (diffDays === 1) return t('bookmark.yesterday')
+  if (diffDays < 7) return t('bookmark.daysAgo', { n: diffDays })
+  if (diffDays < 30) return t('bookmark.weeksAgo', { n: Math.floor(diffDays / 7) })
   return d.toLocaleDateString()
 }
 
@@ -219,6 +234,7 @@ const initFolderChart = () => {
 
   folderChart = echarts.init(folderChartRef.value)
   const option = {
+    color: chartPalette(),
     tooltip: {
       trigger: 'item'
     },
@@ -271,7 +287,7 @@ const initTagChart = () => {
         data: bookmarksByTag.value.map(d => d.value),
         type: 'bar',
         itemStyle: {
-          color: '#3B82F6'
+          color: readCssVar('--lc-accent', '#3b82f6')
         }
       }
     ]
@@ -293,9 +309,37 @@ const updateCharts = () => {
   }
 }
 
+const resizeCharts = () => {
+  folderChart?.resize()
+  tagChart?.resize()
+}
+
 onMounted(() => {
   initFolderChart()
   initTagChart()
+
+  // 容器尺寸变化（窗口缩放、侧栏折叠）比 window.resize 更可靠，且易于释放
+  if (typeof ResizeObserver !== 'undefined') {
+    chartResizeObserver = new ResizeObserver(() => resizeCharts())
+    if (folderChartRef.value) chartResizeObserver.observe(folderChartRef.value)
+    if (tagChartRef.value) chartResizeObserver.observe(tagChartRef.value)
+  } else {
+    window.addEventListener('resize', resizeCharts)
+    windowResizeBound = true
+  }
+})
+
+onUnmounted(() => {
+  if (windowResizeBound) {
+    window.removeEventListener('resize', resizeCharts)
+    windowResizeBound = false
+  }
+  chartResizeObserver?.disconnect()
+  chartResizeObserver = null
+  folderChart?.dispose()
+  folderChart = null
+  tagChart?.dispose()
+  tagChart = null
 })
 
 watch([bookmarksByFolder, bookmarksByTag], () => {
@@ -306,142 +350,153 @@ watch([bookmarksByFolder, bookmarksByTag], () => {
 <style scoped>
 .stats-view {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .stats-title {
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  margin: 0 0 24px 0;
+  font-size: var(--lc-font-2xl);
+  font-weight: var(--lc-weight-semibold);
+  color: var(--lc-text-primary);
+  line-height: var(--lc-leading-tight);
+  margin: 0 0 var(--lc-space-6);
 }
 
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--lc-space-4);
+  margin-bottom: var(--lc-space-8);
 }
 
 .stat-card {
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 20px;
   display: flex;
   align-items: center;
-  gap: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: transform 0.2s;
+  gap: var(--lc-space-4);
+  min-width: 0;
+  padding: var(--lc-space-5);
+  background-color: var(--lc-bg-surface);
+  border: 1px solid var(--lc-border-subtle);
+  border-radius: var(--lc-radius-lg);
+  box-shadow: var(--lc-shadow-card);
+  transition: box-shadow var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--lc-shadow-raised);
 }
 
 .stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--lc-radius-lg);
   font-size: 28px;
 }
 
 .stat-icon.total {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
+  background-color: color-mix(in srgb, var(--lc-accent) 10%, transparent);
+  color: var(--lc-accent);
 }
 
 .stat-icon.folders {
-  background-color: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+  background-color: color-mix(in srgb, var(--lc-success) 10%, transparent);
+  color: var(--lc-success);
 }
 
 .stat-icon.tags {
-  background-color: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background-color: color-mix(in srgb, var(--lc-warning) 10%, transparent);
+  color: var(--lc-warning);
 }
 
 .stat-icon.visits {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background-color: color-mix(in srgb, var(--lc-danger) 10%, transparent);
+  color: var(--lc-danger);
 }
 
 .stat-content {
   flex: 1;
+  min-width: 0;
 }
 
 .stat-value {
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  line-height: 1;
+  font-size: var(--lc-font-2xl);
+  font-weight: var(--lc-weight-semibold);
+  color: var(--lc-text-primary);
+  line-height: var(--lc-leading-tight);
 }
 
 .stat-label {
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
-  margin-top: 4px;
+  margin-top: var(--lc-space-1);
+  font-size: var(--lc-font-sm);
+  color: var(--lc-text-muted);
 }
 
 .stats-charts {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-  margin-bottom: 32px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--lc-space-6);
+  margin-bottom: var(--lc-space-8);
 }
 
-.chart-section {
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+.chart-section,
+.list-section {
+  min-width: 0;
+  padding: var(--lc-space-5);
+  background-color: var(--lc-bg-surface);
+  border: 1px solid var(--lc-border-subtle);
+  border-radius: var(--lc-radius-lg);
+  box-shadow: var(--lc-shadow-card);
 }
 
 .section-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  margin: 0 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: var(--lc-space-2);
+  margin: 0 0 var(--lc-space-4);
+  padding-bottom: var(--lc-space-3);
+  border-bottom: 1px solid var(--lc-border-subtle);
+  font-size: var(--lc-font-lg);
+  font-weight: var(--lc-weight-semibold);
+  color: var(--lc-text-primary);
 }
 
 .chart-container {
+  width: 100%;
   height: 300px;
 }
 
 .stats-lists {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-}
-
-.list-section {
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--lc-space-6);
 }
 
 .list-items {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--lc-space-3);
 }
 
 .list-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px;
-  background-color: var(--el-fill-color-light);
-  border-radius: 8px;
-  transition: background-color 0.2s;
+  justify-content: space-between;
+  gap: var(--lc-space-3);
+  padding: var(--lc-space-3);
+  background-color: var(--lc-bg-subtle);
+  border-radius: var(--lc-radius-md);
+  transition: background-color var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .list-item:hover {
-  background-color: var(--el-fill-color);
+  background-color: var(--lc-bg-hover);
 }
 
 .list-item-content {
@@ -450,16 +505,17 @@ watch([bookmarksByFolder, bookmarksByTag], () => {
 }
 
 .list-item-title {
-  font-weight: 500;
-  color: var(--el-text-color-primary);
+  font-size: var(--lc-font-base);
+  font-weight: var(--lc-weight-medium);
+  color: var(--lc-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .list-item-url {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+  font-size: var(--lc-font-xs);
+  color: var(--lc-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -468,48 +524,39 @@ watch([bookmarksByFolder, bookmarksByTag], () => {
 .list-item-count {
   display: flex;
   align-items: center;
-  gap: 4px;
-  color: var(--el-color-primary);
-  font-weight: 500;
+  gap: var(--lc-space-1);
+  font-size: var(--lc-font-sm);
+  font-weight: var(--lc-weight-medium);
+  color: var(--lc-accent);
 }
 
 .list-item-date {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+  font-size: var(--lc-font-xs);
+  color: var(--lc-text-muted);
   white-space: nowrap;
 }
 
 .empty-list {
+  padding: var(--lc-space-6) var(--lc-space-4);
   text-align: center;
-  padding: 24px;
-  color: var(--el-text-color-secondary);
+  font-size: var(--lc-font-sm);
+  color: var(--lc-text-muted);
 }
 
 @media (max-width: 1200px) {
   .stats-cards {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .stats-charts {
-    grid-template-columns: 1fr;
-  }
-
+  .stats-charts,
   .stats-lists {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 600px) {
   .stats-cards {
-    grid-template-columns: 1fr;
-  }
-
-  .stats-title {
-    font-size: 24px;
-  }
-
-  .stat-value {
-    font-size: 24px;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

@@ -16,8 +16,7 @@
       class="results-list"
     >
       <div class="results-header">
-        <span>{{ searchResults.length }}
-          {{ searchResults.length !== 1 ? t('search.results') : '' }}</span>
+        <span>{{ t('search.results', { count: searchResults.length }) }}</span>
         <el-button
           text
           size="small"
@@ -66,7 +65,7 @@
       class="search-history"
     >
       <div class="history-header">
-        <span>{{ t('search.recentSearches') || 'Recent searches' }}</span>
+        <span>{{ t('search.recentSearches') }}</span>
         <el-button
           text
           size="small"
@@ -101,17 +100,26 @@
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useSearchStore } from '../../stores/search'
-import { useBookmarkStore } from '../../stores'
+import { useBookmarkStore, useUIStore } from '../../stores'
 import type { Bookmark } from '../../types'
 
 const { t } = useI18n()
 const searchStore = useSearchStore()
 const bookmarkStore = useBookmarkStore()
+const uiStore = useUIStore()
 const { isSearching, searchResults, searchHistory } = storeToRefs(searchStore)
+const { settings } = storeToRefs(uiStore)
 const { performSearch, clearSearch, removeFromHistory, clearHistory } = searchStore
 
-const handleSelectBookmark = (bookmark: Bookmark) => {
-  window.open(bookmark.url, '_blank')
+// B10: 与 BookmarkCard/ListView 保持一致的开链路径（系统默认浏览器 + 访问计数）
+const handleSelectBookmark = async (bookmark: Bookmark) => {
+  await bookmarkStore.incrementVisitCount(bookmark.id)
+
+  const defaultBrowser = settings.value?.defaultBrowser || ''
+  const browserPath =
+    typeof defaultBrowser === 'string' ? defaultBrowser : defaultBrowser?.path || ''
+
+  await window.electronAPI.openBrowser(bookmark.url, browserPath)
 }
 
 const handleFaviconError = (bookmark: Bookmark) => {
@@ -137,18 +145,18 @@ const handleClearHistory = () => {
 
 <style scoped>
 .search-results {
-  margin-bottom: 16px;
-  border-top: 1px solid var(--el-border-color);
-  padding-top: 12px;
+  margin-bottom: var(--lc-space-4);
+  border-top: 1px solid var(--lc-border-subtle);
+  padding-top: var(--lc-space-3);
 }
 
 .no-results {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 24px 16px;
-  color: var(--el-text-color-secondary);
+  gap: var(--lc-space-2);
+  padding: var(--lc-space-6) var(--lc-space-4);
+  color: var(--lc-text-muted);
 }
 
 .no-results i {
@@ -157,7 +165,7 @@ const handleClearHistory = () => {
 
 .no-results p {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--lc-font-base);
 }
 
 .results-list {
@@ -169,24 +177,26 @@ const handleClearHistory = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  font-weight: 600;
+  /* 横向 padding 归零：与侧栏其它内容共用一条左边缘 */
+  padding: var(--lc-space-2) 0;
+  font-size: var(--lc-font-xs);
+  color: var(--lc-text-muted);
+  font-weight: var(--lc-weight-semibold);
 }
 
 .result-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: var(--lc-space-2);
+  padding: var(--lc-space-2) 0;
   cursor: pointer;
-  border-radius: 6px;
-  transition: background-color 0.2s;
+  border-radius: var(--lc-radius-sm);
+  color: var(--lc-text-regular);
+  transition: background-color var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .result-item:hover {
-  background-color: var(--el-fill-color-light);
+  background-color: var(--lc-bg-hover);
 }
 
 .result-favicon {
@@ -205,8 +215,8 @@ const handleClearHistory = () => {
 }
 
 .result-favicon i {
-  font-size: 20px;
-  color: var(--el-text-color-secondary);
+  font-size: 16px;
+  color: var(--lc-text-muted);
 }
 
 .result-content {
@@ -215,80 +225,82 @@ const handleClearHistory = () => {
 }
 
 .result-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
+  font-size: var(--lc-font-sm);
+  font-weight: var(--lc-weight-medium);
+  color: var(--lc-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 2px;
+  margin-bottom: var(--lc-space-1);
 }
 
 .result-url {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
+  font-size: var(--lc-font-xs);
+  color: var(--lc-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .search-history {
-  margin-top: 12px;
-  border-top: 1px solid var(--el-border-color-lighter);
-  padding-top: 12px;
+  margin-top: var(--lc-space-3);
+  border-top: 1px solid var(--lc-border-subtle);
+  padding-top: var(--lc-space-3);
 }
 
 .history-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  font-weight: 600;
+  padding: var(--lc-space-2) 0;
+  font-size: var(--lc-font-xs);
+  color: var(--lc-text-muted);
+  font-weight: var(--lc-weight-semibold);
 }
 
 .history-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--lc-space-2);
+  padding: var(--lc-space-2) 0;
   cursor: pointer;
-  border-radius: 6px;
-  transition: background-color 0.2s;
+  border-radius: var(--lc-radius-sm);
   position: relative;
+  transition: background-color var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
 .history-item:hover {
-  background-color: var(--el-fill-color-light);
+  background-color: var(--lc-bg-hover);
 }
 
 .history-item i {
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
+  font-size: 16px;
+  color: var(--lc-text-muted);
   flex-shrink: 0;
 }
 
 .history-item span {
   flex: 1;
-  font-size: 13px;
-  color: var(--el-text-color-primary);
+  min-width: 0;
+  font-size: var(--lc-font-sm);
+  color: var(--lc-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .remove-btn {
-  padding: 4px;
+  padding: var(--lc-space-1);
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity var(--lc-duration-fast) var(--lc-ease-standard);
 }
 
-.history-item:hover .remove-btn {
+.history-item:hover .remove-btn,
+.remove-btn:focus-visible {
   opacity: 1;
 }
 
 .remove-btn i {
-  font-size: 14px;
+  font-size: 16px;
 }
 </style>

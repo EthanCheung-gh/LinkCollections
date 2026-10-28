@@ -42,8 +42,8 @@
           </div>
           <el-select
             v-model="localSettings.language"
+            class="browser-select"
             :placeholder="t('settings.language')"
-            style="width: 180px"
             @change="handleLanguageChange"
           >
             <el-option
@@ -72,10 +72,7 @@
               {{ t('settings.primaryBrowser') }}
             </div>
           </div>
-          <div
-            class="browser-inputs"
-            style="width: 400px"
-          >
+          <div class="browser-inputs control-column">
             <el-input
               v-model="defaultBrowserName"
               :placeholder="t('settings.browserName')"
@@ -98,7 +95,7 @@
               {{ t('settings.additionalBrowsers') }}
             </div>
           </div>
-          <div class="browser-list">
+          <div class="browser-list control-column">
             <div
               v-for="(browser, index) in localSettings.availableBrowsers"
               :key="index"
@@ -119,6 +116,7 @@
               <el-button
                 text
                 type="danger"
+                class="browser-remove"
                 @click="removeBrowser(index)"
               >
                 <i class="i-heroicons-x-mark" />
@@ -206,7 +204,7 @@
       </el-button>
       <el-button
         type="primary"
-        @click="saveSettings"
+        @click="saveSettings()"
       >
         {{ t('common.save') }}
       </el-button>
@@ -215,7 +213,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onActivated } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
@@ -229,7 +227,7 @@ const bookmarkStore = useBookmarkStore()
 const folderStore = useFolderStore()
 const tagStore = useTagStore()
 const { settings } = storeToRefs(uiStore)
-const { fetchSettings, saveSettings: saveSettingsToStore } = uiStore
+const { fetchSettings } = uiStore
 
 const localSettings = ref<Settings>({
   defaultBrowser: '',
@@ -320,7 +318,7 @@ const removeBrowser = (index: number) => {
   localSettings.value.availableBrowsers.splice(index, 1)
 }
 
-const saveSettings = async () => {
+const saveSettings = async (showSuccess = true): Promise<boolean> => {
   try {
     isSaving = true
 
@@ -349,9 +347,13 @@ const saveSettings = async () => {
     const savedSettings = await window.electronAPI.updateSettings(settingsToSave)
     settings.value = savedSettings
 
-    ElMessage.success(t('settings.saved'))
+    if (showSuccess) {
+      ElMessage.success(t('settings.saved'))
+    }
+    return true
   } catch (error) {
     ElMessage.error(t('message.settingsSaveFailed'))
+    return false
   } finally {
     isSaving = false
   }
@@ -376,15 +378,18 @@ const applyLanguage = async (language: string) => {
 }
 
 const resetToDefaults = async () => {
-  try {
-    localSettings.value = { ...defaultSettings }
-    await saveSettingsToStore()
-    applyTheme('light')
-    ElMessage.success(t('settings.resetSuccess'))
-  } catch (error) {
-    ElMessage.error(t('message.settingsSaveFailed'))
-    console.error(error)
-  }
+  // 先把默认值写进 localSettings，再走本页的 saveSettings()：
+  // 后者序列化的是 localSettings（而非 store 里尚未更新的旧值），因此落盘与面板一致。
+  localSettings.value = { ...defaultSettings, availableBrowsers: [] }
+  defaultBrowserName.value = ''
+  defaultBrowserPath.value = ''
+
+  const saved = await saveSettings(false)
+  if (!saved) return
+
+  applyTheme(localSettings.value.theme)
+  await applyLanguage(localSettings.value.language)
+  ElMessage.success(t('settings.resetSuccess'))
 }
 
 const clearAllData = async () => {
@@ -437,116 +442,171 @@ onMounted(async () => {
     applyLanguage('en')
   }
 })
-
-onActivated(() => {
-  if (settings.value) {
-    applyTheme(settings.value.theme)
-    applyLanguage(settings.value.language || 'en')
-  }
-})
 </script>
 
 <style scoped>
 .settings-view {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .settings-title {
-  font-size: 28px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  margin: 0 0 24px 0;
+  font-size: var(--lc-font-2xl);
+  font-weight: var(--lc-weight-semibold);
+  color: var(--lc-text-primary);
+  line-height: var(--lc-leading-tight);
+  margin: 0 0 var(--lc-space-6);
 }
 
 .settings-sections {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  margin-bottom: 32px;
+  gap: var(--lc-space-6);
+  margin-bottom: var(--lc-space-8);
 }
 
 .settings-section {
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  min-width: 0;
+  padding: var(--lc-space-5);
+  background-color: var(--lc-bg-surface);
+  border: 1px solid var(--lc-border-subtle);
+  border-radius: var(--lc-radius-lg);
+  box-shadow: var(--lc-shadow-card);
 }
 
 .section-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  margin: 0 0 20px 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--el-border-color);
+  gap: var(--lc-space-2);
+  margin: 0 0 var(--lc-space-4);
+  padding-bottom: var(--lc-space-3);
+  border-bottom: 1px solid var(--lc-border-subtle);
+  font-size: var(--lc-font-lg);
+  font-weight: var(--lc-weight-semibold);
+  color: var(--lc-text-primary);
 }
 
 .section-title i {
   font-size: 20px;
-  color: var(--el-color-primary);
+  color: var(--lc-accent);
 }
 
+/* 左侧 label 列宽用固定标尺（--lc-form-label-width 由 ui-tokens 提供，未落位时兜底 140px），
+   右侧控件列按内容自适应并统一右对齐，保证各行控件右边缘与左边缘一致 */
 .settings-item {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(var(--lc-form-label-width, 140px), 1fr) max-content;
   align-items: center;
-  padding: 16px 0;
+  gap: var(--lc-space-6);
+  min-height: 48px;
+  padding: var(--lc-space-4) 0;
+  border-bottom: 1px solid var(--lc-border-subtle);
+}
+
+.settings-item:last-child {
+  border-bottom: 0;
 }
 
 .settings-item-content {
-  flex: 1;
+  min-width: 0;
 }
 
 .settings-item-label {
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-  margin-bottom: 4px;
+  margin-bottom: var(--lc-space-1);
+  font-size: var(--lc-font-base);
+  font-weight: var(--lc-weight-medium);
+  color: var(--lc-text-primary);
 }
 
 .settings-item-description {
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
+  font-size: var(--lc-font-sm);
+  color: var(--lc-text-muted);
+}
+
+.browser-select {
+  width: 180px;
+  flex-shrink: 0;
+}
+
+/* 控件列：默认浏览器与可用浏览器两组输入共用同一宽度，左边缘因此对齐 */
+.control-column {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-space-2);
+  flex-shrink: 0;
+  width: 400px;
+  max-width: 100%;
 }
 
 .browser-list {
-  display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: 400px;
+  align-items: stretch;
 }
 
 .browser-item {
   display: flex;
-  gap: 8px;
   align-items: center;
+  gap: var(--lc-space-2);
 }
 
 .browser-inputs {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: var(--lc-space-2);
   flex: 1;
+  min-width: 0;
+}
+
+.browser-remove {
+  flex-shrink: 0;
+  width: var(--lc-control-lg);
+  height: var(--lc-control-lg);
+  padding: 0;
+}
+
+.settings-view :deep(.el-input__wrapper),
+.settings-view :deep(.el-select__wrapper) {
+  min-height: var(--lc-control-lg);
+}
+
+.settings-view :deep(.el-radio-button__inner) {
+  display: inline-flex;
+  align-items: center;
+  height: var(--lc-control-lg);
 }
 
 .settings-footer {
   position: sticky;
   bottom: 0;
-  background-color: #ffffff;
-  padding: 16px 0;
-  border-top: 1px solid var(--el-border-color);
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--lc-space-3);
+  padding: var(--lc-space-4) 0;
+  background-color: var(--lc-bg-surface);
+  border-top: 1px solid var(--lc-border-subtle);
+}
+
+.settings-footer .el-button {
+  height: var(--lc-control-lg);
+}
+
+/* EP 默认给相邻按钮加 margin-left，这里统一由 gap 表达 */
+.settings-footer .el-button + .el-button {
+  margin-left: 0;
 }
 
 @media (max-width: 600px) {
   .settings-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--lc-space-3);
+  }
+
+  .control-column {
+    width: 100%;
   }
 
   .settings-footer {

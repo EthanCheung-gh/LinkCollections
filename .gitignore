@@ -177,3 +177,8 @@ data/
 
 # OpenCode
 AGENTS.md
+.openbitfun/
+/.openbitfun/search/flashgrep-index/
+
+# codegraph 本地索引（由 `codegraph init` 生成）
+.codegraph/

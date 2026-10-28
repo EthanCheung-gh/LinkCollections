@@ -80,16 +80,41 @@ defineExpose({
 
 <style scoped>
 .search-bar {
-  margin-bottom: 16px;
+  margin-bottom: var(--lc-space-3);
 }
 
 .search-bar .el-input {
-  --el-input-border-radius: 8px;
+  --el-input-border-radius: var(--lc-radius-md);
+}
+
+.search-bar :deep(.el-input__wrapper) {
+  min-height: var(--lc-control-lg);
+}
+
+/* placeholder 必须完整显示或以省略号截断，不允许被 ⌘K chip 裁切 */
+.search-bar :deep(.el-input__inner) {
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+/* EP 默认给 append 20px 内距 + 底纹，会额外吞掉可用宽度；
+   保留 EP 的 inset 描边（正确的控件轮廓），只收紧内距、去掉底纹 */
+.search-bar :deep(.el-input-group__append) {
+  padding: 0 var(--lc-space-1);
+  background-color: transparent;
 }
 
 .shortcut-hint {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--lc-space-1);
+  border: 1px solid var(--lc-border-default);
+  border-radius: var(--lc-radius-sm);
+  background-color: var(--lc-bg-subtle);
+  color: var(--lc-text-muted);
+  font-size: var(--lc-font-xs);
+  line-height: var(--lc-leading-tight);
   cursor: default;
   user-select: none;
 }

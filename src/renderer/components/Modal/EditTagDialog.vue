@@ -2,14 +2,14 @@
   <el-dialog
     v-model="dialogVisible"
     :title="t('dialog.editTag')"
-    width="400px"
+    width="var(--lc-dialog-width-md)"
     @close="handleClose"
   >
     <el-form
       ref="formRef"
       :model="form"
       :rules="rules"
-      label-width="80px"
+      label-width="var(--lc-form-label-width)"
     >
       <el-form-item
         :label="t('form.tagName')"
@@ -33,8 +33,8 @@
           />
           <el-input
             v-model="form.color"
+            class="color-input"
             placeholder="#3B82F6"
-            style="width: 120px; margin-left: 12px"
           />
         </div>
       </el-form-item>
@@ -58,8 +58,6 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { FormInstance, FormRules } from 'element-plus'
-import { useTagStore } from '../../stores'
-import { ElMessage } from 'element-plus'
 
 const { t } = useI18n()
 
@@ -75,9 +73,6 @@ interface Emits {
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
-
-const tagStore = useTagStore()
-const { updateTag } = tagStore
 
 const dialogVisible = computed({
   get: () => props.modelValue,
@@ -102,34 +97,35 @@ const predefineColors = [
   '#14B8A6'
 ]
 
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   name: [
-    { required: true, message: 'Please enter tag name', trigger: 'blur' },
-    { min: 1, max: 30, message: 'Name should be 1-30 characters', trigger: 'blur' }
+    { required: true, message: t('validation.pleaseEnterTagName'), trigger: 'blur' },
+    {
+      min: 1,
+      max: 30,
+      message: t('validation.nameLength', { n: 30 }),
+      trigger: 'blur'
+    }
   ],
-  color: [{ required: true, message: 'Please select color', trigger: 'blur' }]
-}
+  color: [{ required: true, message: t('validation.pleaseSelectColor'), trigger: 'blur' }]
+}))
 
 const handleSubmit = async () => {
   if (!formRef.value) return
 
   try {
     await formRef.value.validate()
-
-    const updates = {
-      name: form.value.name,
-      color: form.value.color
-    }
-
-    await updateTag(form.value.id, updates)
-
-    emit('updated', updates)
-
-    ElMessage.success('Tag updated successfully')
-    handleClose()
   } catch {
-    // Validation failed
+    return
   }
+
+  // B4：与 EditFolderDialog 同一约定 —— 弹窗只 emit 一次，写库/提示由父组件
+  // （TagList.handleTagUpdate）统一负责，避免重复写库与重复 toast。
+  emit('updated', {
+    name: form.value.name,
+    color: form.value.color
+  })
+  handleClose()
 }
 
 const handleClose = () => {
@@ -160,5 +156,10 @@ watch(
 .color-picker-wrapper {
   display: flex;
   align-items: center;
+  gap: var(--lc-space-3);
+}
+
+.color-input {
+  width: 120px;
 }
 </style>

@@ -4,15 +4,15 @@
       v-if="filteredBookmarks.length === 0"
       class="empty-state"
     >
-      <i class="i-heroicons-bookmark text-6xl text-gray-300" />
-      <p class="text-gray-500">
-        {{ searchQuery ? 'No bookmarks match your search.' : 'No bookmarks in this folder.' }}
+      <i class="i-heroicons-bookmark empty-icon" />
+      <p class="empty-title">
+        {{ searchQuery ? t('search.noMatch') : t('bookmark.empty') }}
       </p>
       <p
         v-if="!searchQuery"
-        class="text-gray-400 text-sm mt-2"
+        class="empty-hint"
       >
-        Add a bookmark using button above
+        {{ t('bookmark.emptyHint') }}
       </p>
     </div>
 
@@ -38,6 +38,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { useBookmarkStore, useFolderStore, useTagStore } from '../../stores'
 import BookmarkCard from './BookmarkCard.vue'
@@ -50,6 +51,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   searchQuery: ''
 })
+
+const { t } = useI18n()
 
 const bookmarkStore = useBookmarkStore()
 const folderStore = useFolderStore()
@@ -94,6 +97,8 @@ const handleEdit = (bookmark: any) => {
 <style scoped>
 .card-view {
   flex: 1;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -102,43 +107,61 @@ const handleEdit = (bookmark: any) => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-auto-rows: min-content;
-  gap: 4px;
+  align-content: start;
+  gap: var(--lc-space-4);
+  flex: 1;
   min-height: 0;
-  height: 100%;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 @media (min-width: 1600px) {
   .card-grid {
     grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
   }
 }
 
 @media (max-width: 1200px) {
   .card-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
   }
 }
 
 @media (max-width: 900px) {
   .card-grid {
     grid-template-columns: 1fr;
-    gap: 4px;
   }
 }
 
+/* 空态在内容区可用高度内垂直 + 水平居中（不再用 min-height:400px 顶在上 1/3 处） */
 .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  min-height: 400px;
-  color: var(--el-text-color-secondary);
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--lc-space-4);
+  text-align: center;
 }
 
-.empty-state p {
+.empty-icon {
+  font-size: 64px;
+  color: var(--lc-text-muted);
+}
+
+.empty-title {
   margin: 0;
+  font-size: var(--lc-font-lg);
+  color: var(--lc-text-primary);
+  line-height: var(--lc-leading-tight);
+}
+
+.empty-hint {
+  margin: 0;
+  font-size: var(--lc-font-sm);
+  color: var(--lc-text-muted);
+  line-height: var(--lc-leading-normal);
 }
 </style>

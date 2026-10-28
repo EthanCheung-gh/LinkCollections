@@ -1,7 +1,7 @@
 <template>
   <div class="import-export-section">
     <h2 class="section-title">
-      <i class="i-heroicons-arrow-up-down" />
+      <i class="i-heroicons-arrows-up-down" />
       {{ t('importExport.title') }}
     </h2>
 
@@ -11,7 +11,7 @@
           <i class="i-heroicons-arrow-down-tray" />
         </div>
         <h3>{{ t('importExport.exportData') }}</h3>
-        <p>{{ t('importExport.exportData') }}</p>
+        <p>{{ t('importExport.exportFormat') }}</p>
         <div class="action-buttons">
           <el-button
             type="primary"
@@ -34,12 +34,9 @@
           <i class="i-heroicons-arrow-up-tray" />
         </div>
         <h3>{{ t('importExport.importData') }}</h3>
-        <p>{{ t('importExport.importData') }}</p>
+        <p>{{ t('importExport.importFormat') }}</p>
         <div class="import-options">
-          <el-radio-group
-            v-model="importMergeMode"
-            size="small"
-          >
+          <el-radio-group v-model="importMergeMode">
             <el-radio-button value="merge">
               {{ t('importExport.merge') }}
             </el-radio-button>
@@ -68,11 +65,11 @@
 
     <el-alert
       v-if="lastImportResult"
+      class="import-alert"
       :title="`${t('importExport.importSuccess')}: ${lastImportResult.imported.bookmarks} ${t('bookmark.title')}, ${lastImportResult.imported.folders} ${t('folder.title')}, ${lastImportResult.imported.tags} ${t('tag.title')}`"
       type="success"
       :closable="false"
       show-icon
-      style="margin-top: 16px"
     />
   </div>
 </template>
@@ -176,77 +173,101 @@ const handleImportHtml = async () => {
 
 <style scoped>
 .import-export-section {
-  background-color: #ffffff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  min-width: 0;
+  padding: var(--lc-space-5);
+  background-color: var(--lc-bg-surface);
+  border: 1px solid var(--lc-border-subtle);
+  border-radius: var(--lc-radius-lg);
+  box-shadow: var(--lc-shadow-card);
 }
 
 .section-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-  margin: 0 0 20px 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--el-border-color);
+  gap: var(--lc-space-2);
+  margin: 0 0 var(--lc-space-4);
+  padding-bottom: var(--lc-space-3);
+  border-bottom: 1px solid var(--lc-border-subtle);
+  font-size: var(--lc-font-lg);
+  font-weight: var(--lc-weight-semibold);
+  color: var(--lc-text-primary);
 }
 
 .section-title i {
   font-size: 20px;
-  color: var(--el-color-primary);
+  color: var(--lc-accent);
 }
 
 .import-export-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
+  /* min() 兜底：容器窄于 280px 时不会横向溢出 */
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: var(--lc-space-4);
 }
 
 .action-card {
-  padding: 20px;
-  border: 1px solid var(--el-border-color);
-  border-radius: 8px;
+  min-width: 0;
+  padding: var(--lc-space-5);
+  border: 1px solid var(--lc-border-subtle);
+  border-radius: var(--lc-radius-md);
   text-align: center;
 }
 
 .action-icon {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--el-color-primary-light-9);
-  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto var(--lc-space-3);
+  background-color: var(--lc-accent-soft);
+  border-radius: var(--lc-radius-pill);
 }
 
 .action-icon i {
   font-size: 24px;
-  color: var(--el-color-primary);
+  color: var(--lc-accent);
 }
 
 .action-card h3 {
-  margin: 0 0 8px;
-  font-size: 16px;
-  font-weight: 600;
+  margin: 0 0 var(--lc-space-2);
+  font-size: var(--lc-font-lg);
+  font-weight: var(--lc-weight-semibold);
+  color: var(--lc-text-primary);
 }
 
 .action-card p {
-  margin: 0 0 16px;
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
+  margin: 0 0 var(--lc-space-4);
+  font-size: var(--lc-font-sm);
+  color: var(--lc-text-muted);
 }
 
 .action-buttons {
   display: flex;
-  gap: 8px;
+  gap: var(--lc-space-3);
   justify-content: center;
 }
 
+.action-buttons :deep(.el-button) {
+  height: var(--lc-control-lg);
+}
+
+/* EP 默认给相邻按钮加 margin-left，这里统一由 gap 表达 */
+.action-buttons :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 .import-options {
-  margin-bottom: 16px;
+  margin-bottom: var(--lc-space-4);
+}
+
+.import-options :deep(.el-radio-button__inner) {
+  display: inline-flex;
+  align-items: center;
+  height: var(--lc-control-lg);
+}
+
+.import-alert {
+  margin-top: var(--lc-space-4);
 }
 </style>

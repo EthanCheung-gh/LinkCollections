@@ -2,14 +2,14 @@
   <el-dialog
     v-model="dialogVisible"
     :title="t('dialog.addBookmark')"
-    width="500px"
+    width="var(--lc-dialog-width-lg)"
     @close="handleClose"
   >
     <el-form
       ref="formRef"
       :model="form"
       :rules="rules"
-      label-width="80px"
+      label-width="var(--lc-form-label-width)"
     >
       <el-form-item
         :label="t('form.url')"
@@ -59,6 +59,7 @@
       >
         <el-select
           v-model="form.folderId"
+          clearable
           :placeholder="t('form.selectFolder')"
           style="width: 100%"
         >
@@ -109,8 +110,8 @@
           />
           <el-input
             v-model="form.color"
+            class="color-input"
             placeholder="#3B82F6"
-            style="width: 120px; margin-left: 12px"
           />
         </div>
       </el-form-item>
@@ -135,9 +136,10 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
+import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useBookmarkStore, useFolderStore, useTagStore, useUIStore } from '../../stores'
-import { validateBookmarkData } from '../../utils/validation'
+import { isValidUrl, normalizeUrl, validateBookmarkData } from '../../utils/validation'
 import { getFaviconUrl, shouldFetchFavicon } from '../../utils/favicon'
 
 const { t } = useI18n()
@@ -177,7 +179,8 @@ const form = ref({
   description: '',
   folderId: '',
   tags: [] as string[],
-  color: '#3B82F6'
+  color: '#3B82F6',
+  favicon: ''
 })
 
 const predefineColors = [
@@ -191,45 +194,59 @@ const predefineColors = [
   '#14B8A6'
 ]
 
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   url: [
-    { required: true, message: 'Please enter URL', trigger: 'blur' },
+    { required: true, message: t('validation.pleaseEnterUrl'), trigger: 'blur' },
     {
       validator: (_rule, value, callback) => {
         if (!value) {
           callback()
           return
         }
-        try {
-          new URL(value.startsWith('http') ? value : `https://${value}`)
+        // B11：与提交时的校验口径保持一致（utils/validation.ts 的 normalizeUrl + isValidUrl），
+        // 否则会出现「表单放行、提交静默失败」的不一致。
+        if (isValidUrl(normalizeUrl(String(value)))) {
           callback()
-        } catch {
-          callback(new Error('Please enter a valid URL'))
+        } else {
+          callback(new Error(t('validation.invalidUrl')))
         }
       },
       trigger: 'blur'
     }
   ],
-  title: [{ required: true, message: 'Please enter title', trigger: 'blur' }],
-  folderId: [{ required: true, message: 'Please select folder', trigger: 'change' }]
-}
+  title: [{ required: true, message: t('validation.pleaseEnterTitle'), trigger: 'blur' }]
+  // A3：folderId 不再必填 —— 空值表示「未分类」，系统里没有任何文件夹时也能新增书签。
+}))
 
+/**
+ * B12：从 URL 推导可用的最小元数据（标题 + 站点图标）。
+ * 纯本地推导，不发网络请求（CSP 下渲染进程不应直接抓取外部页面）。
+ * 失败时不再静默吞掉：写 console.warn，且不影响用户手动填写。
+ */
 const fetchUrlMetadata = async () => {
   if (!form.value.url) return
 
+  const normalized = normalizeUrl(form.value.url)
+  if (!isValidUrl(normalized)) {
+    console.warn('[AddBookmarkDialog] Skip metadata for invalid URL:', form.value.url)
+    return
+  }
+
   try {
     fetching.value = true
-    const urlStr = form.value.url.startsWith('http') ? form.value.url : `https://${form.value.url}`
-    const url = new URL(urlStr)
+    // 顺手把无协议输入归一化，避免用户提交 example.com 这类半成品字符串
+    form.value.url = normalized
 
     if (!form.value.title) {
-      form.value.title = url.hostname
+      form.value.title = new URL(normalized).hostname
     }
 
     const shouldFetch = settings.value?.autoFetchIcon ?? true
-    if (shouldFetch && shouldFetchFavicon(urlStr)) {
+    if (shouldFetch && shouldFetchFavicon(normalized)) {
+      form.value.favicon = getFaviconUrl(normalized)
     }
   } catch (error) {
+    console.warn('[AddBookmarkDialog] Failed to derive metadata:', error)
   } finally {
     fetching.value = false
   }
@@ -240,27 +257,39 @@ const handleSubmit = async () => {
 
   try {
     await formRef.value.validate()
+  } catch {
+    // 字段级错误已由 el-form 在表单内展示，无需额外提示
+    return
+  }
 
-    const validation = validateBookmarkData(form.value)
-    if (!validation.valid) {
-      return
-    }
+  // B11：先归一化再校验/落库，`example.com` 不再被静默拒绝
+  const normalizedUrl = normalizeUrl(form.value.url)
+  const payload = { ...form.value, url: normalizedUrl }
 
+  const validation = validateBookmarkData(payload)
+  if (!validation.valid) {
+    // A3/B11：校验失败必须有可见反馈，禁止静默 return
+    ElMessage.warning(validation.errors[0])
+    return
+  }
+
+  try {
     const shouldFetch = settings.value?.autoFetchIcon ?? true
-    let favicon = ''
+    let favicon = form.value.favicon
 
-    if (shouldFetch && shouldFetchFavicon(form.value.url)) {
-      favicon = getFaviconUrl(form.value.url)
+    if (!favicon && shouldFetch && shouldFetchFavicon(normalizedUrl)) {
+      favicon = getFaviconUrl(normalizedUrl)
     }
 
     submitting.value = true
     await addBookmark({
-      ...form.value,
+      ...payload,
       favicon
     })
     handleClose()
   } catch (error) {
-    // Validation failed or API error
+    // store 内部已提示失败，这里只记录，避免重复 toast
+    console.error('[AddBookmarkDialog] Failed to add bookmark:', error)
   } finally {
     submitting.value = false
   }
@@ -273,7 +302,8 @@ const handleClose = () => {
     description: '',
     folderId: '',
     tags: [],
-    color: '#3B82F6'
+    color: '#3B82F6',
+    favicon: ''
   }
   formRef.value?.resetFields()
   dialogVisible.value = false
@@ -283,32 +313,35 @@ watch(
   () => props.modelValue,
   async visible => {
     if (visible) {
-      await folderStore.fetchFolders()
-      await tagStore.fetchTags()
-      if (folders.value.length > 0 && !form.value.folderId) {
-        form.value.folderId = folders.value[0].id
-      }
+      await Promise.allSettled([folderStore.fetchFolders(), tagStore.fetchTags()])
+      // A3：不再自动选中第一个文件夹。'' 即「未分类」，也避免用户在无文件夹时被卡死。
     }
   }
 )
 </script>
 
 <style scoped>
+/* 弹窗内布局统一走设计变量（契约 §3：禁止硬编码颜色/间距/圆角/字号） */
 .color-picker-wrapper {
   display: flex;
   align-items: center;
+  gap: var(--lc-space-3);
+}
+
+.color-input {
+  width: 120px;
 }
 
 .tag-option {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--lc-space-2);
 }
 
 .tag-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+  width: var(--lc-space-2);
+  height: var(--lc-space-2);
+  border-radius: var(--lc-radius-pill);
   flex-shrink: 0;
 }
 </style>

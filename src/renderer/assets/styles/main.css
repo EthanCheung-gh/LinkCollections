@@ -1,14 +1,51 @@
-* {
+/* =============================================================================
+ * main.css — 全局样式入口（只做三件事）
+ *   1. 引入设计变量层；
+ *   2. 基础 reset / 正文排版 / #app / 滚动条统一；
+ *   3. 最小必要的 Element Plus 变量映射（浅色 + 深色各一份）。
+ *
+ * 约定：
+ *   - 业务样式一律写在组件 scoped style 里并消费 `--lc-*`，本文件不再承载业务类皮肤；
+ *   - EP 组件外观一律通过 `--el-*` → `--lc-*` 映射实现，禁止用选择器覆盖 EP 内部结构；
+ *   - 不使用 `!important`（全文件 0 处）：EP 外观靠 `--el-*` 变量映射，业务类靠
+ *     `html.dark .x` 的更高特异性，均无需 `!important`。
+ * ============================================================================= */
+
+@import './tokens.css';
+
+/* =============================================================================
+ * 1. 基础 reset
+ * ============================================================================= */
+
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  /* 浅色是默认；深色由 EP dark css-vars 在 html.dark 上置为 dark */
+  color-scheme: light;
+  background-color: var(--lc-bg-canvas);
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  font-size: var(--lc-font-base);
+  line-height: var(--lc-leading-normal);
+  color: var(--lc-text-primary);
+  background-color: var(--lc-bg-canvas);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s, color 0.3s;
+  transition:
+    background-color var(--lc-duration-normal) var(--lc-ease-standard),
+    color var(--lc-duration-normal) var(--lc-ease-standard);
 }
 
 #app {
@@ -16,172 +53,210 @@ body {
   height: 100vh;
 }
 
+::selection {
+  background-color: var(--lc-accent-soft);
+  color: var(--lc-text-primary);
+}
+
+/* =============================================================================
+ * 2. 滚动条统一（8px，thumb = 描边色，hover = 次级文本色）
+ *    组件内若需要更细的滚动条，用自己的 `::-webkit-scrollbar` 覆盖即可
+ *    （scoped 选择器特异性更高）。
+ * ============================================================================= */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--lc-border-default);
+  border-radius: var(--lc-radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--lc-text-muted);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 可滚动容器预留稳定槽位，避免出现/消失滚动条时内容横向跳动。
+   （各组件仍可自行声明；此处是全局兜底基线。） */
+.main-content,
+.bookmarks-view,
+.card-grid,
+.list-view,
+.stats-view,
+.settings-view,
+.sidebar-content {
+  scrollbar-gutter: stable;
+}
+
+/* =============================================================================
+ * 3. 可访问性基线：可见焦点环（契约 §4）
+ *    只作用于原生可交互元素；EP 的按钮 / 输入自带 focus 态（见下方说明），
+ *    通过 CSS 变量跟随主题，深色下自动生效。
+ * ============================================================================= */
+
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--lc-accent);
+  outline-offset: 2px;
+}
+
+/* EP 输入框的聚焦环由 `.el-input__wrapper.is-focus` 的内阴影提供，
+   原生 input 再叠一圈会在药丸圆角里画出一个方块，因此去掉内层的 outline。
+   特异性 0,2,0 > 0,1,1，无需 !important。 */
+.el-input__inner:focus-visible {
+  outline: none;
+}
+
+/* =============================================================================
+ * 4. Element Plus 变量映射（浅色）— EP 默认值 → 本项目语义变量
+ *    只映射“关键变量”：颜色 / 描边 / 填充 / 圆角 / 字号 / 控件高。
+ *    注意：`html.dark` 那一份必须与这里逐条一致（EP 自带的 dark css-vars 特异性
+ *    为 html.dark，低特异性的 :root 无法覆盖它）。
+ * ============================================================================= */
+
+:root {
+  /* 主色及其派生（light-9 曾写死 #ecf5ff，导致深色下 FolderList/TagList/
+     ImportExport 出现近白块；改为跟随主题的 accent-soft） */
+  --el-color-primary: var(--lc-accent);
+  --el-color-primary-light-3: color-mix(in srgb, var(--lc-accent) 70%, var(--lc-bg-surface));
+  --el-color-primary-light-5: color-mix(in srgb, var(--lc-accent) 50%, var(--lc-bg-surface));
+  --el-color-primary-light-7: color-mix(in srgb, var(--lc-accent) 30%, var(--lc-bg-surface));
+  --el-color-primary-light-8: color-mix(in srgb, var(--lc-accent) 20%, var(--lc-bg-surface));
+  --el-color-primary-light-9: var(--lc-accent-soft);
+  --el-color-primary-dark-2: var(--lc-accent-hover);
+  --el-color-success: var(--lc-success);
+  --el-color-warning: var(--lc-warning);
+  --el-color-danger: var(--lc-danger);
+  --el-color-error: var(--lc-danger);
+  --el-color-info: var(--lc-text-muted);
+
+  /* 背景 / 表面 */
+  --el-bg-color: var(--lc-bg-surface);
+  --el-bg-color-page: var(--lc-bg-canvas);
+  --el-bg-color-overlay: var(--lc-bg-surface);
+
+  /* 文本 */
+  --el-text-color-primary: var(--lc-text-primary);
+  --el-text-color-regular: var(--lc-text-regular);
+  --el-text-color-secondary: var(--lc-text-muted);
+  --el-text-color-placeholder: var(--lc-text-muted);
+  --el-text-color-disabled: var(--lc-text-muted);
+
+  /* 描边 */
+  --el-border-color: var(--lc-border-default);
+  --el-border-color-light: var(--lc-border-subtle);
+  --el-border-color-lighter: var(--lc-border-subtle);
+  --el-border-color-extra-light: var(--lc-border-subtle);
+  --el-border-color-dark: var(--lc-border-default);
+  --el-border-color-darker: var(--lc-border-default);
+
+  /* 填充（EP 的 hover / 斑马纹 / 弹层底） */
+  --el-fill-color: var(--lc-bg-active);
+  --el-fill-color-light: var(--lc-bg-hover);
+  --el-fill-color-lighter: var(--lc-bg-subtle);
+  --el-fill-color-dark: var(--lc-bg-hover);
+  --el-fill-color-darker: var(--lc-border-default);
+  --el-fill-color-blank: var(--lc-bg-surface);
+
+  /* 圆角 / 字号 / 控件高 */
+  --el-border-radius-base: var(--lc-radius-sm);
+  --el-border-radius-small: var(--lc-radius-sm);
+  --el-border-radius-round: var(--lc-radius-pill);
+  --el-font-size-base: var(--lc-font-base);
+  --el-component-size: var(--lc-control-md);
+  --el-component-size-large: var(--lc-control-lg);
+  --el-component-size-small: var(--lc-control-sm);
+
+  /* 阴影 / 动效 */
+  --el-box-shadow-light: var(--lc-shadow-card);
+  --el-box-shadow: var(--lc-shadow-raised);
+  --el-transition-duration: var(--lc-duration-fast);
+}
+
+/* =============================================================================
+ * 5. Element Plus 变量映射（深色，与第 4 节逐条对应）
+ *    值同样指向 `--lc-*`，由 html.dark 上的 token 覆盖给出深色取值。
+ * ============================================================================= */
+
 html.dark {
-  --el-bg-color: #141414;
-  --el-bg-color-page: #0a0a0a;
-  --el-text-color-primary: #E5EAF3;
-  --el-text-color-regular: #CFD3DC;
-  --el-text-color-secondary: #A3A6AD;
-  --el-border-color: #4C4D4F;
-  --el-fill-color: #2C2C2C;
-  --el-fill-color-light: #363637;
-  --el-fill-color-lighter: #414243;
-  --el-fill-color-darker: #262727;
-  --el-fill-color-dark: #1F1F1F;
-  --el-color-primary: #409EFF;
-  --el-color-primary-light-9: #ecf5ff;
-  --el-color-success: #67C23A;
-  --el-color-warning: #E6A23C;
-  --el-color-danger: #F56C6C;
-  --el-color-info: #909399;
+  --el-color-primary: var(--lc-accent);
+  --el-color-primary-light-3: color-mix(in srgb, var(--lc-accent) 70%, var(--lc-bg-surface));
+  --el-color-primary-light-5: color-mix(in srgb, var(--lc-accent) 50%, var(--lc-bg-surface));
+  --el-color-primary-light-7: color-mix(in srgb, var(--lc-accent) 30%, var(--lc-bg-surface));
+  --el-color-primary-light-8: color-mix(in srgb, var(--lc-accent) 20%, var(--lc-bg-surface));
+  --el-color-primary-light-9: var(--lc-accent-soft);
+  --el-color-primary-dark-2: var(--lc-accent-hover);
+  --el-color-success: var(--lc-success);
+  --el-color-warning: var(--lc-warning);
+  --el-color-danger: var(--lc-danger);
+  --el-color-error: var(--lc-danger);
+  --el-color-info: var(--lc-text-muted);
+
+  --el-bg-color: var(--lc-bg-surface);
+  --el-bg-color-page: var(--lc-bg-canvas);
+  --el-bg-color-overlay: var(--lc-bg-surface);
+
+  --el-text-color-primary: var(--lc-text-primary);
+  --el-text-color-regular: var(--lc-text-regular);
+  --el-text-color-secondary: var(--lc-text-muted);
+  --el-text-color-placeholder: var(--lc-text-muted);
+  --el-text-color-disabled: var(--lc-text-muted);
+
+  --el-border-color: var(--lc-border-default);
+  --el-border-color-light: var(--lc-border-subtle);
+  --el-border-color-lighter: var(--lc-border-subtle);
+  --el-border-color-extra-light: var(--lc-border-subtle);
+  --el-border-color-dark: var(--lc-border-default);
+  --el-border-color-darker: var(--lc-border-default);
+
+  --el-fill-color: var(--lc-bg-active);
+  --el-fill-color-light: var(--lc-bg-hover);
+  --el-fill-color-lighter: var(--lc-bg-subtle);
+  --el-fill-color-dark: var(--lc-bg-hover);
+  --el-fill-color-darker: var(--lc-border-default);
+  --el-fill-color-blank: var(--lc-bg-surface);
+
+  --el-border-radius-base: var(--lc-radius-sm);
+  --el-border-radius-small: var(--lc-radius-sm);
+  --el-border-radius-round: var(--lc-radius-pill);
+  --el-font-size-base: var(--lc-font-base);
+  --el-component-size: var(--lc-control-md);
+  --el-component-size-large: var(--lc-control-lg);
+  --el-component-size-small: var(--lc-control-sm);
+
+  --el-box-shadow-light: var(--lc-shadow-card);
+  --el-box-shadow: var(--lc-shadow-raised);
+  --el-transition-duration: var(--lc-duration-fast);
 }
 
-html.dark .min-h-screen.bg-gray-50,
-html.dark body {
-  background-color: #0a0a0a !important;
-}
+/* =============================================================================
+ * 6. 深色主题过渡层（**临时**，落地后整段删除）
+ *
+ * 原来这里有 8 条 `html.dark .xxx` 兜底，用来盖住组件 scoped style 里写死的
+ * `background-color: #ffffff`。随着 Sidebar / StatsView / SettingsView /
+ * FolderList / TagList / BookmarkCard 陆续改成消费 `var(--lc-bg-surface)`，
+ * 已逐条删除（见交付报告“可后续删除清单”）。
+ *
+ * 现状只剩 ImportExport（ui-pages 仍在改）一处硬编码：
+ *   ImportExport.vue:176  background-color: #ffffff;
+ * 它落地为 `var(--lc-bg-surface)` 后，本节可整体删除。
+ *
+ * 特异性说明：`html.dark .x`(0,2,1) > `.x[data-v-*]`(0,2,0)，因此不需要
+ * `!important`；目前 main.css 中 `!important` 计数为 0。
+ * ============================================================================= */
 
-html.dark .card-view,
-html.dark .list-view,
-html.dark .stats-view,
-html.dark .settings-view,
-html.dark .main-content {
-  background-color: #0a0a0a !important;
-}
-
-html.dark .sidebar {
-  background-color: #1F1F1F !important;
-}
-
-html.dark .sidebar-footer,
-html.dark .sidebar-content {
-  border-color: #4C4D4F;
-}
-
-html.dark .card-grid,
-html.dark .stats-cards,
-html.dark .stats-charts,
-html.dark .stats-lists {
-  background-color: transparent;
-}
-
-html.dark .bookmark-card,
-html.dark .stat-card,
-html.dark .chart-section,
-html.dark .list-section,
-html.dark .settings-section {
-  background-color: #1F1F1F !important;
-  color: #E5EAF3 !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-html.dark .settings-item-label,
-html.dark .settings-item-description {
-  color: #E5EAF3 !important;
-}
-
-html.dark .settings-item-description {
-  color: #A3A6AD !important;
-}
-
-html.dark .section-title {
-  color: #E5EAF3 !important;
-  border-color: #4C4D4F !important;
-}
-
-html.dark .stats-title {
-  color: #E5EAF3 !important;
-}
-
-html.dark .footer-btn,
-html.dark .logo,
-html.dark .title {
-  color: #E5EAF3 !important;
-}
-
-html.dark .min-h-screen.bg-gray-50,
-html.dark #app,
-html.dark body,
-html.dark html {
-  background-color: #0a0a0a !important;
-}
-
-html.dark .app-container,
-html.dark .main-content {
-  background-color: #0a0a0a !important;
-}
-
-html.dark .content-wrapper {
-  background-color: #141414 !important;
-}
-
-html.dark .bg-gray-50,
-html.dark .bg-white {
-  background-color: #141414 !important;
-}
-
-html.dark .settings-footer {
-  background-color: #1F1F1F !important;
-  border-color: #4C4D4F !important;
-}
-
-html.dark .el-button {
-  background-color: #2C2C2C !important;
-  border-color: #4C4D4F !important;
-  color: #E5EAF3 !important;
-}
-
-html.dark .el-button:hover {
-  background-color: #363637 !important;
-}
-
-html.dark .el-button--primary {
-  background-color: #409EFF !important;
-  border-color: #409EFF !important;
-  color: #ffffff !important;
-}
-
-html.dark .el-button--primary:hover {
-  background-color: #66b1ff !important;
-}
-
-html.dark .el-input__wrapper {
-  background-color: #2C2C2C !important;
-  box-shadow: 0 0 0 1px #4C4D4F inset !important;
-}
-
-html.dark .el-input__inner {
-  background-color: transparent !important;
-  color: #E5EAF3 !important;
-}
-
-html.dark .el-input__inner::placeholder {
-  color: #A3A6AD !important;
-}
-
-html.dark .el-table__body {
-  background-color: #141414 !important;
-}
-
-html.dark .el-table__cell {
-  background-color: #141414 !important;
-  color: #E5EAF3 !important;
-}
-
-html.dark .el-table__cell.el-table-fixed-column--right {
-  background-color: #141414 !important;
-}
-
-html.light {
-  --el-bg-color: #ffffff;
-  --el-bg-color-page: #f5f7fa;
-  --el-text-color-primary: #303133;
-  --el-text-color-regular: #606266;
-  --el-text-color-secondary: #909399;
-  --el-border-color: #dcdfe6;
-  --el-fill-color: #f0f2f5;
-  --el-fill-color-light: #f5f7fa;
-  --el-fill-color-lighter: #fafbfc;
-  --el-fill-color-darker: #e9e9eb;
-  --el-fill-color-dark: #dcdfe6;
+html.dark .import-export-section {
+  background-color: var(--lc-bg-surface);
 }
