@@ -53,7 +53,9 @@
     "empty": "No bookmarks here",
     "emptyHint": "Add one with the button above",
     "unknown": "Unknown",
-    "weeksAgo": "{n} w ago"
+    "weeksAgo": "{n} w ago",
+    "pin": "Pin to top",
+    "unpin": "Unpin"
   },
   "folder": {
     "title": "Folders",
@@ -62,7 +64,11 @@
     "deleteFolder": "Delete Folder",
     "folderName": "Folder Name",
     "noFolders": "No folders yet",
-    "allBookmarks": "All Bookmarks"
+    "allBookmarks": "All Bookmarks",
+    "parentFolder": "Parent Folder",
+    "topLevel": "Top level",
+    "expand": "Expand",
+    "collapse": "Collapse"
   },
   "tag": {
     "title": "Tags",
@@ -165,7 +171,7 @@
     "confirmClearAll": "This will permanently delete all bookmarks, folders, and tags. This action cannot be undone.",
     "deleteWarning": "Warning",
     "confirmDeleteBookmarkNamed": "Delete \"{name}\"? This cannot be undone.",
-    "confirmDeleteFolderCascade": "Bookmarks in this folder will be moved to uncategorized."
+    "confirmDeleteFolderCascade": "Bookmarks in this folder will be moved to uncategorized. Its subfolders will be moved up one level."
   },
   "validation": {
     "required": "This field is required",

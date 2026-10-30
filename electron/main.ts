@@ -6,6 +6,7 @@ import { registerFolderHandlers } from './ipc/folders'
 import { registerTagHandlers } from './ipc/tags'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerImportExportHandlers } from './ipc/import-export'
+import { runDataMigrations } from './utils/schema'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -218,6 +219,21 @@ function createWindow() {
 app.whenReady().then(() => {
   // C18：CSP 必须在任何窗口加载内容之前注册，且只注册一次
   installContentSecurityPolicy()
+
+  // 数据迁移必须在注册 IPC 处理器之前完成：渲染层能读到数据之前，数据形状就得是新版本
+  // （旧书签补 `pinned: false`），否则「缺失即未置顶」的语义会散落到渲染层的每个角落。
+  // 失败不阻塞启动：用户仍应能把应用打开并导出/抢救数据；此时 meta 不会被写成新版本，
+  // 下次启动会重试（迁移步骤本身幂等）。
+  try {
+    const { from, to, applied } = runDataMigrations()
+    if (applied.length > 0) {
+      console.log(`[schema] Migrated data schema v${from} → v${to}: ${applied.join(', ')}`)
+    } else {
+      console.log(`[schema] Data schema up to date (v${from})`)
+    }
+  } catch (error) {
+    console.error('[schema] Data migration failed; continuing startup with existing data:', error)
+  }
 
   registerBookmarkHandlers()
   registerFolderHandlers()

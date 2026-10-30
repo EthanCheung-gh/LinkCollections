@@ -43,11 +43,18 @@
       <el-table-column prop="title" label="Title" min-width="200">
         <template #default="{ row }">
           <div class="title-cell">
-            <div
-              class="title"
-              @click="handleUrlClick(row)"
-              v-html="highlightText(row.title, props.searchQuery)"
-            />
+            <div class="title-line">
+              <i
+                v-if="row.pinned"
+                class="i-heroicons-star-solid pinned-mark"
+                aria-hidden="true"
+              />
+              <div
+                class="title"
+                @click="handleUrlClick(row)"
+                v-html="highlightText(row.title, props.searchQuery)"
+              />
+            </div>
             <div
               class="url"
               @click="handleUrlClick(row)"
@@ -191,7 +198,7 @@ const folderStore = useFolderStore()
 const tagStore = useTagStore()
 const uiStore = useUIStore()
 const { bookmarks } = storeToRefs(bookmarkStore)
-const { currentFolderId } = storeToRefs(folderStore)
+const { currentFolderSubtreeIds } = storeToRefs(folderStore)
 const { tags, selectedTagIds } = storeToRefs(tagStore)
 const { settings } = storeToRefs(uiStore)
 const { deleteBookmark, incrementVisitCount } = bookmarkStore
@@ -206,11 +213,23 @@ const browsers = computed(() => {
   return settings.value.availableBrowsers.filter(b => b.path.trim() !== '')
 })
 
+/**
+ * 置顶优先分组：先拼接置顶项、再拼接其余项，组内保持入参顺序。
+ * CardView 里有一份语义完全一致的实现，两处改动请保持同步。
+ */
+const pinnedFirst = (list: Bookmark[]) => [
+  ...list.filter(b => b.pinned === true),
+  ...list.filter(b => b.pinned !== true)
+]
+
 const filteredBookmarks = computed(() => {
   let filtered = bookmarks.value
 
-  if (currentFolderId.value) {
-    filtered = filtered.filter(b => b.folderId === currentFolderId.value)
+  // 选中文件夹 = 展示「该文件夹 + 全部后代」的书签（与 CardView 逻辑保持一致）。
+  // currentFolderSubtreeIds 为 null 表示「全部书签」（currentFolderId === ''），不过滤。
+  const subtreeIds = currentFolderSubtreeIds.value
+  if (subtreeIds) {
+    filtered = filtered.filter(b => b.folderId !== '' && subtreeIds.has(b.folderId))
   }
 
   if (selectedTagIds.value && selectedTagIds.value.length > 0) {
@@ -253,7 +272,9 @@ const filteredBookmarks = computed(() => {
     })
   }
 
-  return filtered
+  // 置顶优先级高于任何列排序：必须在既有排序**之后**再套一层分组，
+  // 这样「组内仍然按用户选择的列 / 原顺序」排列（与 CardView 语义一致）。
+  return pinnedFirst(filtered)
 })
 
 const handleEdit = (bookmark: Bookmark) => {
@@ -457,7 +478,22 @@ const tagBackgroundColor = (color?: string | null): string => {
   gap: var(--lc-space-1);
 }
 
+.title-line {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-space-1);
+  min-width: 0;
+}
+
+/* 置顶标识：仅置顶时出现，用强调色；不占用操作列/标签列 */
+.pinned-mark {
+  flex-shrink: 0;
+  font-size: var(--lc-font-sm);
+  color: var(--lc-accent);
+}
+
 .title {
+  min-width: 0;
   font-size: var(--lc-font-base);
   font-weight: var(--lc-weight-medium);
   color: var(--lc-text-primary);

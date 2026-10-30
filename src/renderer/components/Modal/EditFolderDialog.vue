@@ -22,6 +22,26 @@
         />
       </el-form-item>
 
+      <el-form-item :label="t('folder.parentFolder')">
+        <el-select
+          v-model="form.parentId"
+          class="parent-select"
+          clearable
+          :placeholder="t('folder.topLevel')"
+        >
+          <el-option
+            v-for="node in parentOptions"
+            :key="node.id"
+            :label="node.name"
+            :value="node.id"
+          >
+            <span :style="{ paddingLeft: `calc(var(--lc-space-3) * ${node.depth})` }">
+              {{ node.name }}
+            </span>
+          </el-option>
+        </el-select>
+      </el-form-item>
+
       <el-form-item :label="t('form.color')">
         <div class="color-picker-wrapper">
           <el-color-picker
@@ -53,9 +73,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
+import { useFolderStore } from '../../stores'
+import type { FolderTreeNode } from '../../types'
 
 const { t } = useI18n()
 
@@ -72,6 +95,10 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
+const folderStore = useFolderStore()
+const { folderTree } = storeToRefs(folderStore)
+const { descendantIdsOf } = folderStore
+
 const dialogVisible = computed({
   get: () => props.modelValue,
   set: value => emit('update:modelValue', value)
@@ -81,7 +108,27 @@ const formRef = ref<FormInstance>()
 const form = ref({
   name: '',
   color: '#3B82F6',
-  id: ''
+  id: '',
+  /** 上级文件夹 id；`null` / `''` = 顶层 */
+  parentId: null as string | null
+})
+
+/** 空值（clearable 会把值置为 undefined）统一归一为「顶层」(`null`) */
+const normalizeParentId = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
+
+/**
+ * 父级候选项 = 全部文件夹 − 自身 − 自身所有后代。
+ * 后端 update-folder 还会再校验一次（`throw new Error('Invalid parent folder')`），
+ * 这里排除只是为了让用户根本选不出环。
+ */
+const parentOptions = computed<FolderTreeNode[]>(() => {
+  if (!form.value.id) return folderTree.value
+  const excluded = new Set(descendantIdsOf(form.value.id))
+  return folderTree.value.filter(node => !excluded.has(node.id))
 })
 
 const predefineColors = [
@@ -125,7 +172,8 @@ const handleSubmit = async () => {
 
   emit('updated', {
     name: form.value.name,
-    color: form.value.color
+    color: form.value.color,
+    parentId: normalizeParentId(form.value.parentId)
   })
   handleClose()
 }
@@ -134,7 +182,8 @@ const handleClose = () => {
   form.value = {
     name: '',
     color: '#3B82F6',
-    id: ''
+    id: '',
+    parentId: null
   }
   formRef.value?.resetFields()
   dialogVisible.value = false
@@ -147,7 +196,8 @@ watch(
       form.value = {
         name: newFolder.name,
         color: newFolder.color || '#3B82F6',
-        id: newFolder.id
+        id: newFolder.id,
+        parentId: normalizeParentId(newFolder.parentId)
       }
     }
   }
@@ -163,5 +213,10 @@ watch(
 
 .color-input {
   width: 120px;
+}
+
+/* 上级文件夹下拉占满 label 右侧的可用宽度（不做硬编码宽度） */
+.parent-select {
+  width: 100%;
 }
 </style>

@@ -15,6 +15,8 @@ interface Bookmark {
   tags: string[]
   visitCount: number
   lastVisited: string | null
+  /** 置顶标记：导入时脏值一律收敛为 false（与 ipc/bookmarks.ts 的口径一致） */
+  pinned: boolean
   createdAt: string
   updatedAt: string
 }
@@ -672,6 +674,8 @@ export function registerImportExportHandlers(): void {
               // C22：沿用导入文件里的访问统计，「导出 → 导入」往返不再清零
               visitCount: sanitizeVisitCount(bookmark.visitCount),
               lastVisited: sanitizeLastVisited(bookmark.lastVisited),
+              // 置顶状态沿用导出文件：只认真布尔，脏值一律 false
+              pinned: bookmark.pinned === true,
               createdAt: bookmark.createdAt || now,
               updatedAt: now
             })
@@ -786,6 +790,8 @@ export function registerImportExportHandlers(): void {
             // Netscape 书签格式不携带访问次数/最近访问时间，这里只能降级为初始值（不是缺陷）
             visitCount: 0,
             lastVisited: null,
+            // Netscape 书签格式同样不携带「置顶」状态，导入后一律视为未置顶
+            pinned: false,
             createdAt: now,
             updatedAt: now
           })

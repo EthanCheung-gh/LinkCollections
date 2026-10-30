@@ -65,6 +65,10 @@ export const useBookmarkStore = defineStore('bookmark', () => {
       if (updates.favicon !== undefined) {
         updateData.favicon = updates.favicon
       }
+      // 置顶切换复用同一个 update 通道：只转发布尔值，脏值交给主进程白名单丢弃
+      if (typeof updates.pinned === 'boolean') {
+        updateData.pinned = updates.pinned
+      }
 
       const updated = await window.electronAPI.updateBookmark(id, updateData)
       if (updated) {
@@ -86,6 +90,29 @@ export const useBookmarkStore = defineStore('bookmark', () => {
       }
       console.error(error)
       throw error
+    }
+  }
+
+  /**
+   * 切换置顶状态。
+   *
+   * 复用既有的 `updateBookmark`（`showMessage = false`）：置顶是高频的轻量操作，
+   * 每次点击都弹成功 toast 会打断操作，因此**成功不提示、失败才提示**。
+   * 不新增 IPC 通道：主进程 `update-bookmark` 已经支持 `pinned` 布尔白名单。
+   */
+  const togglePin = async (id: string) => {
+    const current = bookmarks.value.find(b => b.id === id)
+    if (!current) {
+      console.warn(`togglePin: bookmark ${id} not found in local state`)
+      return
+    }
+
+    try {
+      return await updateBookmark(id, { pinned: !current.pinned }, false)
+    } catch (error) {
+      ElMessage.error(t('message.bookmarkUpdateFailed'))
+      console.error(error)
+      return
     }
   }
 
@@ -155,6 +182,7 @@ export const useBookmarkStore = defineStore('bookmark', () => {
     fetchBookmarks,
     addBookmark,
     updateBookmark,
+    togglePin,
     deleteBookmark,
     incrementVisitCount,
     clearAllBookmarks,

@@ -53,7 +53,9 @@
     "empty": "这里还没有书签",
     "emptyHint": "用上方按钮添加一个",
     "unknown": "未知",
-    "weeksAgo": "{n} 周前"
+    "weeksAgo": "{n} 周前",
+    "pin": "置顶",
+    "unpin": "取消置顶"
   },
   "folder": {
     "title": "文件夹",
@@ -62,7 +64,11 @@
     "deleteFolder": "删除文件夹",
     "folderName": "文件夹名称",
     "noFolders": "暂无文件夹",
-    "allBookmarks": "全部书签"
+    "allBookmarks": "全部书签",
+    "parentFolder": "上级文件夹",
+    "topLevel": "顶层",
+    "expand": "展开",
+    "collapse": "收起"
   },
   "tag": {
     "title": "标签",
@@ -165,7 +171,7 @@
     "confirmClearAll": "此操作将永久删除所有书签、文件夹和标签，且无法撤销。",
     "deleteWarning": "警告",
     "confirmDeleteBookmarkNamed": "确定删除「{name}」吗？此操作不可撤销。",
-    "confirmDeleteFolderCascade": "该文件夹内的书签将被移动到未分类。"
+    "confirmDeleteFolderCascade": "该文件夹内的书签将被移动到未分类，其子文件夹将上移一级。"
   },
   "validation": {
     "required": "此字段为必填项",

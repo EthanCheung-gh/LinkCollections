@@ -30,7 +30,14 @@
         @click.prevent.stop="handleUrlClick"
         v-html="highlightedUrl"
       />
-      <h3 class="title" @click.stop v-html="highlightedTitle" />
+      <h3 class="title-row">
+        <i
+          v-if="isPinned"
+          class="i-heroicons-star-solid pinned-mark"
+          aria-hidden="true"
+        />
+        <span class="title" @click.stop v-html="highlightedTitle" />
+      </h3>
       <p class="description" @click.stop v-html="highlightedDescription" />
     </div>
 
@@ -52,6 +59,18 @@
         <span>{{ bookmark.visitCount }}</span>
       </div>
       <div class="actions">
+        <el-button
+          text
+          size="small"
+          class="pin-btn"
+          :class="{ active: isPinned }"
+          :title="isPinned ? t('bookmark.unpin') : t('bookmark.pin')"
+          :aria-label="isPinned ? t('bookmark.unpin') : t('bookmark.pin')"
+          :aria-pressed="isPinned"
+          @click.stop="handleTogglePin"
+        >
+          <i :class="isPinned ? 'i-heroicons-star-solid' : 'i-heroicons-star'" />
+        </el-button>
         <el-dropdown trigger="click" @command="handleMoreAction">
           <el-button text size="small" class="action-btn" @click.stop>
             <i class="i-heroicons-ellipsis-vertical" />
@@ -153,6 +172,13 @@ const safeColor = (color?: string | null): string => {
 }
 
 const cardAccent = computed(() => safeColor(props.bookmark.color))
+
+// 旧数据/第三方数据可能没有 pinned，语义上「缺失 === 未置顶」
+const isPinned = computed(() => props.bookmark.pinned === true)
+
+const handleTogglePin = () => {
+  bookmarkStore.togglePin(props.bookmark.id)
+}
 
 const tagBackgroundColor = (color?: string | null): string => {
   return `color-mix(in srgb, ${safeColor(color)} 13%, transparent)`
@@ -344,8 +370,25 @@ const handleMoreAction = async (command: string) => {
   text-decoration: underline;
 }
 
-.title {
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-space-1);
   margin: 0 0 var(--lc-space-1);
+}
+
+/* 置顶标识：常规流里的行内星标（不是绝对定位），
+   不会被 favicon / 最近访问 / 更多按钮压住 */
+.pinned-mark {
+  flex-shrink: 0;
+  font-size: var(--lc-font-sm);
+  color: var(--lc-accent);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
   color: var(--lc-text-primary);
   font-size: var(--lc-font-base);
   font-weight: var(--lc-weight-medium);
@@ -421,6 +464,41 @@ const handleMoreAction = async (command: string) => {
 
 .action-btn:hover {
   background-color: var(--lc-bg-hover);
+}
+
+/* 置顶按钮常驻可见（不像「更多」那样 hover 才出现），否则用户找不到这个高频操作；
+   未置顶时压低存在感，置顶后变成强调色实心星。
+   颜色写在图标上（而不是按钮上）：Element Plus 的 .el-button 自带 color 规则，
+   直接继承会被覆盖。 */
+.pin-btn {
+  width: var(--lc-control-sm);
+  height: var(--lc-control-sm);
+  padding: 0;
+  opacity: 0.55;
+  transition: opacity var(--lc-duration-fast) var(--lc-ease-standard);
+}
+
+.pin-btn :deep(i) {
+  color: var(--lc-text-muted);
+  transition: color var(--lc-duration-fast) var(--lc-ease-standard);
+}
+
+.bookmark-card:hover .pin-btn,
+.pin-btn:focus-visible {
+  opacity: 1;
+}
+
+.pin-btn:hover {
+  background-color: var(--lc-bg-hover);
+}
+
+.pin-btn.active,
+.pin-btn.active:hover {
+  opacity: 1;
+}
+
+.pin-btn.active :deep(i) {
+  color: var(--lc-accent);
 }
 
 :deep(mark) {

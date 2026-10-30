@@ -43,6 +43,7 @@ import { storeToRefs } from 'pinia'
 import { useBookmarkStore, useFolderStore, useTagStore } from '../../stores'
 import BookmarkCard from './BookmarkCard.vue'
 import EditDialog from '../Modal/EditDialog.vue'
+import type { Bookmark } from '../../types'
 
 interface Props {
   searchQuery?: string
@@ -58,17 +59,31 @@ const bookmarkStore = useBookmarkStore()
 const folderStore = useFolderStore()
 const tagStore = useTagStore()
 const { bookmarks } = storeToRefs(bookmarkStore)
-const { currentFolderId } = storeToRefs(folderStore)
+const { currentFolderSubtreeIds } = storeToRefs(folderStore)
 const { selectedTagIds } = storeToRefs(tagStore)
 
 const editDialogVisible = ref(false)
 const editingBookmark = ref<any>(null)
 
+/**
+ * 置顶优先分组：先拼接置顶项、再拼接其余项，**组内保持入参顺序**
+ * （`filter` 天然稳定，不引入额外比较器去扰动既有顺序）。
+ * ListView 里有一份语义完全一致的实现（那边必须在既有列排序「之后」调用），
+ * 两处改动请保持同步。
+ */
+const pinnedFirst = (list: Bookmark[]) => [
+  ...list.filter(b => b.pinned === true),
+  ...list.filter(b => b.pinned !== true)
+]
+
 const filteredBookmarks = computed(() => {
   let filtered = bookmarks.value
 
-  if (currentFolderId.value) {
-    filtered = filtered.filter(b => b.folderId === currentFolderId.value)
+  // 选中文件夹 = 展示「该文件夹 + 全部后代」的书签（与 ListView 逻辑保持一致）。
+  // currentFolderSubtreeIds 为 null 表示「全部书签」（currentFolderId === ''），不过滤。
+  const subtreeIds = currentFolderSubtreeIds.value
+  if (subtreeIds) {
+    filtered = filtered.filter(b => b.folderId !== '' && subtreeIds.has(b.folderId))
   }
 
   if (selectedTagIds.value.length > 0) {
@@ -85,7 +100,7 @@ const filteredBookmarks = computed(() => {
     )
   }
 
-  return filtered
+  return pinnedFirst(filtered)
 })
 
 const handleEdit = (bookmark: any) => {

@@ -13,6 +13,8 @@ interface Bookmark {
   tags: string[]
   visitCount: number
   lastVisited: string | null
+  /** 置顶标记：落盘对象里恒为布尔（旧数据由 utils/schema.ts 的迁移补齐） */
+  pinned: boolean
   createdAt: string
   updatedAt: string
 }
@@ -71,6 +73,8 @@ export function registerBookmarkHandlers(): void {
       tags: toSafeTags(input.tags),
       visitCount: 0,
       lastVisited: null,
+      // 只认真布尔：`'true'` / 1 / undefined 一律落成 false
+      pinned: input.pinned === true,
       createdAt: now,
       updatedAt: now
     }
@@ -125,6 +129,11 @@ export function registerBookmarkHandlers(): void {
 
     if (patch.lastVisited === null || typeof patch.lastVisited === 'string') {
       next.lastVisited = patch.lastVisited
+    }
+
+    // 置顶只接受布尔；脏值（`'yes'` / 1 / null）视为「未提供」，保持原值不变
+    if (typeof patch.pinned === 'boolean') {
+      next.pinned = patch.pinned
     }
 
     bookmarks[index] = next

@@ -23,6 +23,10 @@
         @click="handleTagClick(tag.id)"
         @contextmenu.prevent="handleContextMenu($event, tag)"
       >
+        <span
+          class="tag-gutter"
+          aria-hidden="true"
+        />
         <div
           class="tag-dot"
           :style="{ backgroundColor: tag.color }"
@@ -197,6 +201,14 @@ onUnmounted(() => {
 }
 
 /* 行高与 FolderList 完全一致 */
+/* 与 FolderList 的折叠箭头槽等宽（16px）：让标签圆点与文件夹图标落在同一列。
+   标签本身没有层级，槽位仅用于对齐。 */
+.tag-gutter {
+  width: var(--lc-space-4);
+  height: var(--lc-space-4);
+  flex: 0 0 auto;
+}
+
 .tag-item {
   display: flex;
   align-items: center;

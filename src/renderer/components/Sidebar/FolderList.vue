@@ -21,6 +21,11 @@
         @click="handleFolderClick('')"
       >
         <div class="folder-item-content">
+          <!-- 与文件夹行的折叠箭头槽等宽：保证「全部书签」与各级文件夹的图标列对齐 -->
+          <span
+            class="folder-toggle-placeholder"
+            aria-hidden="true"
+          />
           <div class="folder-icon-wrapper all-bookmarks-icon">
             <i class="i-heroicons-bookmark" />
           </div>
@@ -29,14 +34,33 @@
       </div>
 
       <div
-        v-for="folder in folders"
+        v-for="folder in visibleFolders"
         :key="folder.id"
         class="folder-item"
         :class="{ active: folder.id === currentFolderId }"
+        :style="{ paddingLeft: `calc(var(--lc-space-3) * ${folder.depth})` }"
         @click="handleFolderClick(folder.id)"
         @contextmenu.prevent="handleContextMenu($event, folder)"
       >
         <div class="folder-item-content">
+          <button
+            v-if="folder.hasChildren"
+            type="button"
+            class="folder-toggle"
+            :aria-label="isCollapsed(folder.id) ? t('folder.expand') : t('folder.collapse')"
+            :aria-expanded="!isCollapsed(folder.id)"
+            @click.stop="toggleCollapse(folder.id)"
+          >
+            <i
+              class="i-heroicons-chevron-right"
+              :class="{ expanded: !isCollapsed(folder.id) }"
+            />
+          </button>
+          <span
+            v-else
+            class="folder-toggle-placeholder"
+            aria-hidden="true"
+          />
           <div
             class="folder-icon-wrapper"
             :style="{ backgroundColor: folder.color || '#3B82F6' }"
@@ -101,18 +125,19 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { ElMessageBox } from 'element-plus'
 import { useFolderStore, useUIStore } from '../../stores'
+import type { Folder, FolderTreeNode } from '../../types'
 import AddFolderDialog from '../Modal/AddFolderDialog.vue'
 import EditFolderDialog from '../Modal/EditFolderDialog.vue'
 
 const { t } = useI18n()
 const folderStore = useFolderStore()
 const uiStore = useUIStore()
-const { folders, currentFolderId } = storeToRefs(folderStore)
+const { folders, currentFolderId, folderTree } = storeToRefs(folderStore)
 const { setCurrentFolder, updateFolder, deleteFolder } = folderStore
 const { setCurrentView } = uiStore
 
@@ -123,12 +148,53 @@ const contextMenuFolder = ref<any>(null)
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
 
+/**
+ * 折叠状态**只存在内存**（不写 settings）：刷新 / 重启后回到「全部展开」。
+ * 用 Set 的「替换」而非 `add/delete` 原地修改，保证 computed 能感知变化。
+ */
+const collapsedIds = ref<Set<string>>(new Set())
+
+const isCollapsed = (id: string): boolean => collapsedIds.value.has(id)
+
+const toggleCollapse = (id: string) => {
+  const next = new Set(collapsedIds.value)
+  if (next.has(id)) {
+    next.delete(id)
+  } else {
+    next.add(id)
+  }
+  collapsedIds.value = next
+}
+
+/**
+ * 可见行 = folderTree 裁掉已折叠节点的整个子树。
+ * folderTree 是深度优先且「父在前子在后」，所以某节点之后所有 `depth` 更深的连续行
+ * 就是它的子树，遇到 depth 回退即结束（不需要另外查 parentId 链）。
+ */
+const visibleFolders = computed<FolderTreeNode[]>(() => {
+  if (collapsedIds.value.size === 0) return folderTree.value
+
+  const result: FolderTreeNode[] = []
+  let hiddenDepth: number | null = null
+  for (const node of folderTree.value) {
+    if (hiddenDepth !== null) {
+      if (node.depth > hiddenDepth) continue
+      hiddenDepth = null
+    }
+    result.push(node)
+    if (node.hasChildren && collapsedIds.value.has(node.id)) {
+      hiddenDepth = node.depth
+    }
+  }
+  return result
+})
+
 const handleFolderClick = (id: string) => {
   setCurrentFolder(id)
   setCurrentView('bookmarks')
 }
 
-const handleContextMenu = (event: MouseEvent, folder: any) => {
+const handleContextMenu = (event: MouseEvent, folder: Folder) => {
   contextMenuFolder.value = folder
   contextMenuPosition.value = { x: event.clientX, y: event.clientY }
   contextMenuVisible.value = true
@@ -268,6 +334,46 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+}
+
+/* 折叠箭头槽 / 叶子项占位槽：等宽等高，保证同层级叶子项与有子级项的图标列对齐 */
+.folder-toggle,
+.folder-toggle-placeholder {
+  width: var(--lc-space-4);
+  height: var(--lc-space-4);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.folder-toggle {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: var(--lc-radius-sm);
+  color: var(--lc-text-muted);
+  cursor: pointer;
+  transition: background-color var(--lc-duration-fast) var(--lc-ease-standard);
+}
+
+.folder-toggle:hover {
+  background-color: var(--lc-bg-hover);
+}
+
+/* 键盘可达性：与 ListView 操作按钮同一套 focus 视觉 */
+.folder-toggle:focus-visible {
+  outline: 2px solid var(--lc-accent);
+  outline-offset: 2px;
+}
+
+.folder-toggle i {
+  font-size: var(--lc-font-lg);
+  transition: transform var(--lc-duration-fast) var(--lc-ease-standard);
+}
+
+.folder-toggle i.expanded {
+  transform: rotate(90deg);
 }
 
 .folder-icon-wrapper {
