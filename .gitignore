@@ -182,3 +182,6 @@ AGENTS.md
 
 # codegraph 本地索引（由 `codegraph init` 生成）
 .codegraph/
+
+# 纯 Web 构建产物（npm run build:web）
+dist-web/

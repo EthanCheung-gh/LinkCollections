@@ -18,7 +18,7 @@
           :content="t('search.searchShortcut')"
           placement="top"
         >
-          <span class="shortcut-hint">⌘K</span>
+          <span class="shortcut-hint">{{ shortcutLabel }}</span>
         </el-tooltip>
       </template>
     </el-input>
@@ -26,13 +26,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import { Search } from '@element-plus/icons-vue'
 import { useSearchStore } from '../../stores/search'
 
 const { t } = useI18n()
+
+// 快捷键徽标要跟随平台：应用实际监听的是 Ctrl/Cmd+K（见 App.vue），
+// 在 Windows/Linux 上显示 ⌘ 会误导用户。
+const shortcutLabel = computed(() =>
+  /mac/i.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K'
+)
 
 const searchStore = useSearchStore()
 const { isSearching } = storeToRefs(searchStore)

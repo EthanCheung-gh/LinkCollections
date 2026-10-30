@@ -92,15 +92,15 @@
             <el-dropdown-menu>
               <el-dropdown-item command="edit">
                 <i class="i-heroicons-pencil mr-2" />
-                Edit
+                {{ t('common.edit') }}
               </el-dropdown-item>
               <el-dropdown-item command="share">
                 <i class="i-heroicons-share mr-2" />
-                Share
+                {{ t('bookmark.share') }}
               </el-dropdown-item>
               <el-dropdown-item divided command="open-default">
                 <i class="i-heroicons-arrow-top-right-on-square mr-2" />
-                Open in Default Browser
+                {{ t('bookmark.openInDefaultBrowser') }}
               </el-dropdown-item>
               <el-dropdown-item
                 v-for="(browser, index) in browsers"
@@ -108,11 +108,11 @@
                 :command="`open-browser-${index}`"
               >
                 <i class="i-heroicons-globe-alt mr-2" />
-                {{ browser.name || `Browser ${index + 1}` }}
+                {{ browser.name || t('bookmark.browserN', { n: index + 1 }) }}
               </el-dropdown-item>
               <el-dropdown-item divided command="delete">
                 <i class="i-heroicons-trash mr-2" />
-                Delete
+                {{ t('common.delete') }}
               </el-dropdown-item>
             </el-dropdown-menu>
           </template>

@@ -56,7 +56,7 @@
             {{ totalVisits }}
           </div>
           <div class="stat-label">
-            Total Visits
+            {{ t('stats.totalVisits') }}
           </div>
         </div>
       </div>
@@ -75,7 +75,7 @@
 
       <div class="chart-section">
         <h2 class="section-title">
-          Bookmarks by Tag
+          {{ t('stats.byTag') }}
         </h2>
         <div
           ref="tagChartRef"
@@ -119,7 +119,7 @@
 
       <div class="list-section">
         <h2 class="section-title">
-          Recently Added
+          {{ t('stats.recentlyAdded') }}
         </h2>
         <div class="list-items">
           <div
