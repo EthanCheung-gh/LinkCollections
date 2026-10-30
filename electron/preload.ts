@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   bulkDeleteBookmarks: (ids: string[]) => ipcRenderer.invoke('bulk-delete-bookmarks', ids),
   incrementVisitCount: (id: string) => ipcRenderer.invoke('increment-visit-count', id),
   clearAllBookmarks: () => ipcRenderer.invoke('clearAllBookmarks'),
+  /** 逐次访问记录（趋势图数据源）：数组，元素 `{ bookmarkId, visitedAt }` */
+  getVisitHistory: () => ipcRenderer.invoke('get-visit-history'),
+  clearVisitHistory: () => ipcRenderer.invoke('clear-visit-history'),
   getFolders: () => ipcRenderer.invoke('get-folders'),
   addFolder: (folder: any) => ipcRenderer.invoke('add-folder', folder),
   updateFolder: (id: string, updates: any) => ipcRenderer.invoke('update-folder', id, updates),

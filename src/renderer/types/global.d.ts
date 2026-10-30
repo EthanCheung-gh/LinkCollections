@@ -1,17 +1,18 @@
 /**
  * `window.electronAPI` 的类型契约。
  *
- * 必须与 `electron/preload.ts` 暴露的 23 个方法**逐一对应**：
+ * 必须与 `electron/preload.ts` 暴露的 25 个方法**逐一对应**：
  * openBrowser / getBookmarks / addBookmark / updateBookmark / deleteBookmark /
  * bulkUpdateBookmarks / bulkDeleteBookmarks /
- * incrementVisitCount / clearAllBookmarks / getFolders / addFolder / updateFolder /
+ * incrementVisitCount / clearAllBookmarks / getVisitHistory / clearVisitHistory /
+ * getFolders / addFolder / updateFolder /
  * deleteFolder / clearAllFolders / getTags / addTag / updateTag / deleteTag /
  * clearAllTags / getSettings / updateSettings / exportData / importData
  *
  * 返回值均以对应 `ipcMain.handle` 的实际返回值为准；失败时主进程 `throw`，
  * 渲染进程侧表现为 rejected Promise（不是 `{ success: false }`）。
  */
-import type { Bookmark, Folder, Tag, Settings } from './index'
+import type { Bookmark, Folder, Tag, Settings, VisitRecord } from './index'
 
 /** `ipcMain.handle('export-data')` 的返回：用户取消时 `canceled: true` 且无 `filePath`。 */
 export interface ExportResult {
@@ -84,6 +85,13 @@ export interface ElectronAPI {
   incrementVisitCount: (id: string) => Promise<Bookmark>
   /** `clearAllBookmarks`：成功恒为 `true`，失败 reject。 */
   clearAllBookmarks: () => Promise<boolean>
+  /**
+   * `get-visit-history`：逐次访问记录（**未聚合**，按落盘顺序）。
+   * 已由主进程过滤脏元素，且只包含 90 天 / 5000 条以内的数据。
+   */
+  getVisitHistory: () => Promise<VisitRecord[]>
+  /** `clear-visit-history`：成功恒为 `true`，失败 reject。 */
+  clearVisitHistory: () => Promise<boolean>
   getFolders: () => Promise<Folder[]>
   addFolder: (folder: Partial<Folder>) => Promise<Folder>
   updateFolder: (id: string, updates: Partial<Folder>) => Promise<Folder>

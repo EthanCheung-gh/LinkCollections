@@ -1,4 +1,5 @@
-import { readJsonFile, writeJsonFile } from './storage'
+import fs from 'fs'
+import { getDataPath, readJsonFile, writeJsonFile } from './storage'
 
 /**
  * 数据 schema 版本与迁移框架。
@@ -11,16 +12,27 @@ import { readJsonFile, writeJsonFile } from './storage'
  *
  * 读写一律复用 `utils/storage.ts`：原子写（tmp + rename）、损坏文件备份、
  * BOM 容错都在那一层统一处理，这里不要再自己碰 `fs`。
+ * （唯一例外：v2 迁移需要区分「文件不存在」与「文件存在但内容为空数组」，
+ *  storage 没有暴露存在性判断，这里用 `fs.existsSync(getDataPath(...))` 做一次探测。）
  */
 
 /** 当前代码期望的数据 schema 版本。新增字段/结构变更时自增，并在 MIGRATIONS 里追加一步。 */
-export const DATA_SCHEMA_VERSION = 1
+export const DATA_SCHEMA_VERSION = 2
 
 /** 存放版本号的元数据文件（与 bookmarks.json 等在同一 data 目录下）。 */
 const META_FILE = 'meta.json'
 
 /** 被迁移的数据文件名 */
 const BOOKMARKS_FILE = 'bookmarks.json'
+
+/**
+ * 访问历史文件名。
+ *
+ * 必须与 `electron/ipc/history.ts` 的 `HISTORY_FILE` 一致；迁移在 IPC 注册之前执行，
+ * 此时直接 import `ipc/history` 会把 `ipcMain` 及其依赖拖进迁移路径，因此这里按
+ * 现有风格（BOOKMARKS_FILE 同样在 ipc 侧另有一份）保留本地常量。
+ */
+const HISTORY_FILE = 'history.json'
 
 export interface SchemaMeta {
   schemaVersion: number
@@ -114,12 +126,31 @@ function migrateAddPinnedToBookmarks(): void {
 }
 
 /**
+ * v1 → v2：引入访问历史文件 `history.json`。
+ *
+ * - 只在文件**不存在**时写入空数组 `[]`；已经存在（哪怕是空数组、甚至内容损坏被
+ *   storage 备份后留下的空文件）时**一律不写盘** —— 这一步不能覆盖用户已经积累的历史；
+ * - **不做历史回填**（有意为之）：旧数据只有聚合的 `visitCount` / `lastVisited`，
+ *   把它们摊到过去几天等于伪造从未记录过的访问时间。趋势图从升级当天开始累积，
+ *   这是产品上明确接受的代价，不要在这里「补数据」；
+ * - 幂等：重复执行永远只可能写一次 `[]`，且第二次执行时文件已存在 → 直接返回。
+ */
+function migrateAddVisitHistory(): void {
+  if (fs.existsSync(getDataPath(HISTORY_FILE))) {
+    return
+  }
+
+  writeJsonFile<unknown[]>(HISTORY_FILE, [])
+}
+
+/**
  * 迁移表：按 `version` 升序执行，`version` 是这一步完成后的目标版本。
- * 以后新增迁移只需 append 一行（例如 `{ version: 2, name: '...', run: ... }`），
+ * 以后新增迁移只需 append 一行（例如 `{ version: 3, name: '...', run: ... }`），
  * 并把 {@link DATA_SCHEMA_VERSION} 自增。
  */
 const MIGRATIONS: readonly Migration[] = [
-  { version: 1, name: 'add-pinned-to-bookmarks', run: migrateAddPinnedToBookmarks }
+  { version: 1, name: 'add-pinned-to-bookmarks', run: migrateAddPinnedToBookmarks },
+  { version: 2, name: 'add-visit-history', run: migrateAddVisitHistory }
 ]
 
 /**

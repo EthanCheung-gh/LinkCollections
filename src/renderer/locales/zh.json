@@ -184,7 +184,12 @@
     "visits": "次访问",
     "totalVisits": "总访问次数",
     "byTag": "标签分布",
-    "recentlyAdded": "最近添加"
+    "recentlyAdded": "最近添加",
+    "visitTrend": "访问趋势",
+    "range7": "7 天",
+    "range30": "30 天",
+    "range90": "90 天",
+    "noHistory": "暂无访问记录 —— 趋势将从今天起开始累积"
   },
   "dialog": {
     "addBookmark": "添加书签",
@@ -263,6 +268,7 @@
     "settingsLoadFailed": "加载设置失败",
     "settingsSaveFailed": "保存设置失败",
     "bulkUpdated": "已更新 {count} 个书签",
-    "bulkDeleted": "已删除 {count} 个书签"
+    "bulkDeleted": "已删除 {count} 个书签",
+    "historyLoadFailed": "加载访问历史失败"
   }
 }

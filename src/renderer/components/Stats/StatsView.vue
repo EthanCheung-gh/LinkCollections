@@ -62,6 +62,44 @@
       </div>
     </div>
 
+    <div class="chart-section trend-section">
+      <div class="trend-header">
+        <h2 class="section-title trend-title">
+          {{ t('stats.visitTrend') }}
+        </h2>
+        <el-radio-group
+          v-model="trendRange"
+          class="range-switch"
+        >
+          <el-radio-button :value="7">
+            {{ t('stats.range7') }}
+          </el-radio-button>
+          <el-radio-button :value="30">
+            {{ t('stats.range30') }}
+          </el-radio-button>
+          <el-radio-button :value="90">
+            {{ t('stats.range90') }}
+          </el-radio-button>
+        </el-radio-group>
+      </div>
+      <!--
+        v-show 而不是 v-if：容器必须一直在 DOM 里，ECharts 实例才能在数据到达后
+        直接 init / resize（v-if 会让 ref 在被观察期间反复置空）。
+        全为 0 时隐藏图表，改为显示一行提示（空图表比一句话更让人困惑）。
+      -->
+      <div
+        v-show="hasTrendData"
+        ref="trendChartRef"
+        class="chart-container trend-chart"
+      />
+      <div
+        v-if="!hasTrendData"
+        class="empty-list"
+      >
+        {{ t('stats.noHistory') }}
+      </div>
+    </div>
+
     <div class="stats-charts">
       <div class="chart-section">
         <h2 class="section-title">
@@ -156,22 +194,28 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as echarts from 'echarts'
 import { storeToRefs } from 'pinia'
-import { useBookmarkStore, useFolderStore, useTagStore } from '../../stores'
+import { useBookmarkStore, useFolderStore, useTagStore, useHistoryStore } from '../../stores'
 
 const { t } = useI18n()
 const bookmarkStore = useBookmarkStore()
 const folderStore = useFolderStore()
 const tagStore = useTagStore()
+const historyStore = useHistoryStore()
 const { bookmarks } = storeToRefs(bookmarkStore)
 const { folders } = storeToRefs(folderStore)
 const { tags } = storeToRefs(tagStore)
 
 const folderChartRef = ref<HTMLElement>()
 const tagChartRef = ref<HTMLElement>()
+const trendChartRef = ref<HTMLElement>()
 let folderChart: echarts.ECharts | null = null
 let tagChart: echarts.ECharts | null = null
+let trendChart: echarts.ECharts | null = null
 let chartResizeObserver: ResizeObserver | null = null
 let windowResizeBound = false
+
+/** 访问趋势的时间范围（天）。三档固定值，不持久化：进入统计页总是「最近 30 天」。 */
+const trendRange = ref<number>(30)
 
 // 图表颜色必须由 canvas 消费，无法写在样式里 —— 统一从冻结的 lc 变量读取
 const readCssVar = (name: string, fallback: string): string => {
@@ -216,6 +260,15 @@ const bookmarksByTag = computed(() => {
   return data.filter(d => d.value > 0)
 })
 
+/**
+ * 趋势数据：按**本地日期**聚合、升序、缺日补 0（实现在 stores/history.ts 的
+ * `buildDailySeries`，纯函数，聚合规则不依赖 ECharts）。
+ */
+const trendPoints = computed(() => historyStore.dailySeries(trendRange.value))
+
+/** 全部为 0 时不画空图表，改显示一行提示文案 */
+const hasTrendData = computed(() => trendPoints.value.some(point => point.count > 0))
+
 const formatDate = (date: string) => {
   const d = new Date(date)
   const now = new Date()
@@ -226,7 +279,13 @@ const formatDate = (date: string) => {
   if (diffDays === 1) return t('bookmark.yesterday')
   if (diffDays < 7) return t('bookmark.daysAgo', { n: diffDays })
   if (diffDays < 30) return t('bookmark.weeksAgo', { n: Math.floor(diffDays / 7) })
-  return d.toLocaleDateString()
+
+  // 超过 30 天改用固定格式，避免同一列表里「4 周前」与区域化日期（M/D/YYYY）混排。
+  // 与 ListView 的最近访问列保持一致：YYYY/MM/DD（本地时区）。
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}/${month}/${day}`
 }
 
 const initFolderChart = () => {
@@ -309,24 +368,109 @@ const updateCharts = () => {
   }
 }
 
+/**
+ * 折线图 option。
+ *
+ * 颜色每次都从 `chartPalette()` 现读（canvas 无法消费 CSS 变量）：统计页是
+ * `v-else-if` 挂载的视图，切换主题/主题色后重新进入就会读到新值，与既有两个图表
+ * （在 init 时读一次）行为一致；范围切换时这里也会重新取色，顺带跟随主题。
+ */
+const buildTrendOption = () => {
+  const accent = chartPalette()[0]
+  const points = trendPoints.value
+
+  return {
+    color: [accent],
+    grid: { left: 8, right: 16, top: 16, bottom: 8, containLabel: true },
+    tooltip: {
+      trigger: 'axis'
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      // 直接传 `MM-DD`：ECharts 只要求类目轴上每个点有唯一标签，年份对 7/30/90 天窗口无意义
+      data: points.map(point => point.date.slice(5)),
+      axisLabel: {
+        color: readCssVar('--lc-text-muted', '#8b93a1')
+      },
+      axisLine: {
+        lineStyle: { color: readCssVar('--lc-border-default', '#e3e6eb') }
+      }
+    },
+    yAxis: {
+      type: 'value',
+      // 访问次数是整数：避免出现 0.2 / 0.4 这种刻度
+      minInterval: 1,
+      axisLabel: {
+        precision: 0,
+        color: readCssVar('--lc-text-muted', '#8b93a1')
+      },
+      splitLine: {
+        lineStyle: { color: readCssVar('--lc-border-subtle', '#eef0f3') }
+      }
+    },
+    series: [
+      {
+        type: 'line',
+        name: t('stats.visitTrend'),
+        // 刻意不做平滑：平滑会在没有访问的日期之间「编造」起伏，读起来像有数据
+        smooth: false,
+        showSymbol: false,
+        symbolSize: 6,
+        data: points.map(point => point.count),
+        itemStyle: { color: accent },
+        lineStyle: { color: accent, width: 2 },
+        // 淡色面积填充用 opacity 表达的（canvas 不吃 color-mix / 变量）
+        areaStyle: { color: accent, opacity: 0.15 }
+      }
+    ]
+  }
+}
+
+const initTrendChart = () => {
+  if (trendChart || !trendChartRef.value) return
+  trendChart = echarts.init(trendChartRef.value)
+  trendChart.setOption(buildTrendOption())
+  // 数据比挂载晚到（fetchHistory 是异步的）时才走到这里，
+  // 因此需要补一次 observe —— onMounted 里的观察只覆盖「挂载时已有数据」的情况。
+  if (chartResizeObserver && trendChartRef.value) {
+    chartResizeObserver.observe(trendChartRef.value)
+  }
+}
+
+const updateTrendChart = () => {
+  if (!trendChart) return
+  // 整份 option 覆盖（而不是只改 series）：颜色/轴颜色都依赖 CSS 变量，
+  // 每次更新重新读取即可跟随主题，代价可以忽略（最多 90 个点）。
+  trendChart.setOption(buildTrendOption())
+}
+
 const resizeCharts = () => {
   folderChart?.resize()
   tagChart?.resize()
+  // 趋势图可能在数据到达后才创建，resize 必须容忍 null
+  trendChart?.resize()
 }
 
 onMounted(() => {
   initFolderChart()
   initTagChart()
+  // 挂载时如果 store 里已有历史（从其它视图切回来），直接建图；否则等 watch 里的数据到达
+  if (hasTrendData.value) initTrendChart()
 
   // 容器尺寸变化（窗口缩放、侧栏折叠）比 window.resize 更可靠，且易于释放
   if (typeof ResizeObserver !== 'undefined') {
     chartResizeObserver = new ResizeObserver(() => resizeCharts())
     if (folderChartRef.value) chartResizeObserver.observe(folderChartRef.value)
     if (tagChartRef.value) chartResizeObserver.observe(tagChartRef.value)
+    if (trendChart && trendChartRef.value) chartResizeObserver.observe(trendChartRef.value)
   } else {
     window.addEventListener('resize', resizeCharts)
     windowResizeBound = true
   }
+
+  // 历史数据独立拉取：失败只提示一次（store 内部 catch），不阻塞其它统计
+  void historyStore.fetchHistory()
 })
 
 onUnmounted(() => {
@@ -340,11 +484,28 @@ onUnmounted(() => {
   folderChart = null
   tagChart?.dispose()
   tagChart = null
+  trendChart?.dispose()
+  trendChart = null
 })
 
 watch([bookmarksByFolder, bookmarksByTag], () => {
   updateCharts()
 })
+
+/**
+ * `flush: 'post'` 是必需的：`hasTrendData` 翻转后容器的 `v-show` 才会变成可见，
+ * 若在默认的 pre 阶段 init，ECharts 会拿到一个 `display:none`（0×0）的容器并报错。
+ */
+watch(
+  trendPoints,
+  () => {
+    if (hasTrendData.value) {
+      initTrendChart()
+      updateTrendChart()
+    }
+  },
+  { flush: 'post' }
+)
 </script>
 
 <style scoped>
@@ -470,6 +631,53 @@ watch([bookmarksByFolder, bookmarksByTag], () => {
 .chart-container {
   width: 100%;
   height: 300px;
+}
+
+/* ---------- 访问趋势 ---------- */
+
+.trend-section {
+  margin-bottom: var(--lc-space-8);
+}
+
+.trend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lc-space-4);
+  margin-bottom: var(--lc-space-4);
+  padding-bottom: var(--lc-space-3);
+  border-bottom: 1px solid var(--lc-border-subtle);
+}
+
+/* 标题在下划线之外，与范围切换同一行：压掉 .section-title 自带的下划线与外边距 */
+.trend-header .section-title {
+  margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.trend-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * 只覆盖尺寸，不覆盖颜色：EP 的选中/未选中配色已经跟随 --el-color-primary（被 ui store
+ * 与设置页同步成主题色）与深色变量，与 SettingsView / ImportExport 的写法保持一致 ——
+ * 抢 EP 的配色会把选中态压成未选中（scoped 属性选择器让权重打平、组件样式后加载）。
+ */
+.range-switch :deep(.el-radio-button__inner) {
+  display: inline-flex;
+  align-items: center;
+  height: var(--lc-control-md);
+  padding: 0 var(--lc-space-3);
+  font-size: var(--lc-font-sm);
+}
+
+.trend-chart {
+  height: 280px;
 }
 
 .stats-lists {

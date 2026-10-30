@@ -3,6 +3,10 @@ import { v4 as uuidv4 } from 'uuid'
 import fs from 'fs'
 import path from 'path'
 import { readJsonFile, writeJsonFile } from '../utils/storage'
+// replace 模式会丢弃全部旧书签，它们的访问历史必须一起清掉，并纳入同一个写入事务
+import { restoreHistory, snapshotHistory } from './history'
+
+const HISTORY_FILE = 'history.json'
 
 interface Bookmark {
   id: string
@@ -567,6 +571,7 @@ export function registerImportExportHandlers(): void {
           const previousBookmarks = getBookmarks()
           const previousFolders = getFolders()
           const previousTags = getTags()
+          const previousHistory = snapshotHistory()
 
           const existingBookmarks = merge ? previousBookmarks : []
           const existingFolders = merge ? previousFolders : []
@@ -700,6 +705,12 @@ export function registerImportExportHandlers(): void {
               label: BOOKMARKS_FILE,
               save: () => saveBookmarks(allBookmarks),
               restore: () => saveBookmarks(previousBookmarks)
+            },
+            {
+              label: HISTORY_FILE,
+              // replace：旧书签被丢弃，历史随之清空；merge：保留原历史
+              save: () => (merge ? true : restoreHistory([])),
+              restore: () => restoreHistory(previousHistory)
             }
           ])
 
@@ -721,6 +732,7 @@ export function registerImportExportHandlers(): void {
         const previousBookmarks = getBookmarks()
         const previousFolders = getFolders()
         const previousTags = getTags()
+        const previousHistory = snapshotHistory()
 
         const existingBookmarks = merge ? previousBookmarks : []
         const existingFolders = merge ? previousFolders : []
@@ -816,6 +828,11 @@ export function registerImportExportHandlers(): void {
             label: BOOKMARKS_FILE,
             save: () => saveBookmarks(allBookmarks),
             restore: () => saveBookmarks(previousBookmarks)
+          },
+          {
+            label: HISTORY_FILE,
+            save: () => (merge ? true : restoreHistory([])),
+            restore: () => restoreHistory(previousHistory)
           }
         ])
 

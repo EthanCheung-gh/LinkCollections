@@ -1,6 +1,9 @@
 import { ipcMain } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 import { readJsonFile, writeJsonFile } from '../utils/storage'
+// 访问历史与书签写在两个文件里：这里**直接调用函数**而不是走 IPC，
+// 避免主进程自己 invoke 自己的通道（多一层序列化，且错误语义会被 wrap 成字符串）。
+import { appendVisit, clearHistory, removeBookmarkHistory, removeBookmarksHistory } from './history'
 
 interface Bookmark {
   id: string
@@ -270,6 +273,13 @@ export function registerBookmarkHandlers(): void {
     }
 
     if (saveBookmarks(filtered)) {
+      // 书签已删除：同步删掉它的全部访问历史，避免悬空 id 继续被趋势图统计。
+      // 历史清理失败只记日志 —— 书签已经删掉了，不能反过来报「删除失败」。
+      try {
+        removeBookmarkHistory(id)
+      } catch (error) {
+        console.error(`[history] Failed to remove visit history for bookmark ${id}:`, error)
+      }
       return
     }
     throw new Error('Failed to delete bookmark')
@@ -298,6 +308,16 @@ export function registerBookmarkHandlers(): void {
     bookmarks[index] = updated
 
     if (saveBookmarks(bookmarks)) {
+      // 书签（visitCount/lastVisited）先落盘，再追加一条逐次记录。
+      // 两次文件写入是有意的取舍：bookmarks.json 与 history.json 各自原子写，
+      // 不做跨文件事务（Electron 侧没有这个能力，实现成本远超收益）。
+      // 历史写失败不能让「访问」整体失败 —— 计数已经成功落盘了，
+      // 因此这里只记日志，仍然返回更新后的书签。
+      try {
+        appendVisit(id)
+      } catch (error) {
+        console.error(`[history] Failed to append visit for bookmark ${id}:`, error)
+      }
       return updated
     }
     throw new Error('Failed to update visit count')
@@ -305,6 +325,13 @@ export function registerBookmarkHandlers(): void {
 
   ipcMain.handle('clearAllBookmarks', () => {
     if (saveBookmarks([])) {
+      // 「清空全部数据」必须是彻底的：书签没了，历史记录留着全是悬空 id。
+      // 与其它两处一致：历史清理失败只记日志，不让已经成功的清空变成失败。
+      try {
+        clearHistory()
+      } catch (error) {
+        console.error('[history] Failed to clear visit history:', error)
+      }
       return true
     }
     throw new Error('Failed to clear bookmarks')
@@ -392,6 +419,15 @@ export function registerBookmarkHandlers(): void {
     if (!saveBookmarks(remaining)) {
       throw new Error('Failed to bulk delete bookmarks')
     }
+
+    // 清理这些书签的访问历史（一次读写），否则趋势图会继续统计已删除的书签。
+    // 历史清理失败不应让批量删除整体失败。
+    try {
+      removeBookmarksHistory([...requested])
+    } catch (error) {
+      console.error('[bookmarks] Failed to clean visit history after bulk delete:', error)
+    }
+
     return { deleted, missing }
   })
 }

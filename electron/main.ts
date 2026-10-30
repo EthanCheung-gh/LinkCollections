@@ -2,6 +2,7 @@ import { app, BrowserWindow, session, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { registerBookmarkHandlers } from './ipc/bookmarks'
+import { registerHistoryHandlers } from './ipc/history'
 import { registerFolderHandlers } from './ipc/folders'
 import { registerTagHandlers } from './ipc/tags'
 import { registerSettingsHandlers } from './ipc/settings'
@@ -236,6 +237,8 @@ app.whenReady().then(() => {
   }
 
   registerBookmarkHandlers()
+  // 访问历史是统计页趋势图的数据源；必须在迁移之后注册（v2 保证 history.json 存在）
+  registerHistoryHandlers()
   registerFolderHandlers()
   registerTagHandlers()
   registerSettingsHandlers()

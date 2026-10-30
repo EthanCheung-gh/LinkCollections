@@ -184,7 +184,12 @@
     "visits": "visits",
     "totalVisits": "Total Visits",
     "byTag": "Bookmarks by Tag",
-    "recentlyAdded": "Recently Added"
+    "recentlyAdded": "Recently Added",
+    "visitTrend": "Visit Trend",
+    "range7": "7 days",
+    "range30": "30 days",
+    "range90": "90 days",
+    "noHistory": "No visit history yet — the trend starts recording from today onwards"
   },
   "dialog": {
     "addBookmark": "Add Bookmark",
@@ -263,6 +268,7 @@
     "settingsLoadFailed": "Failed to load settings",
     "settingsSaveFailed": "Failed to save settings",
     "bulkUpdated": "{count} bookmarks updated",
-    "bulkDeleted": "{count} bookmarks deleted"
+    "bulkDeleted": "{count} bookmarks deleted",
+    "historyLoadFailed": "Failed to load visit history"
   }
 }
