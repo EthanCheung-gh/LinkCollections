@@ -6,12 +6,14 @@ import { registerBookmarkHandlers, purgeExpiredTrash, TRASH_RETENTION_DAYS } fro
 import { registerHistoryHandlers } from './ipc/history'
 import { registerFolderHandlers } from './ipc/folders'
 import { registerTagHandlers } from './ipc/tags'
-import { registerSettingsHandlers } from './ipc/settings'
+import { registerSettingsHandlers, isAutoUpdateEnabled } from './ipc/settings'
 import { registerImportExportHandlers } from './ipc/import-export'
 import { registerLinkHandlers } from './ipc/links'
 import { runDataMigrations } from './utils/schema'
 import { createQuickAddController } from './quick-add'
 import { createTray, QUICK_ADD_ACCELERATOR, SHOW_WINDOW_ACCELERATOR } from './tray'
+import { createUpdater } from './updater'
+import type { UpdateStatus, UpdateStatusSnapshot } from './updater'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -205,6 +207,75 @@ const quickAddController = createQuickAddController({
   installNavigationGuards
 })
 
+/**
+ * 更新状态广播：`webContents.send('update-status', status)` 发给**所有**窗口。
+ *
+ * 不做「除发送者外」的排除：更新状态是纯主进程产生的事件，没有回环风险；
+ * 两个窗口（主窗口、快速添加浮窗）都收到也不会互相触发写操作。
+ * `isDestroyed()` 必须跳过：关闭中的窗口 `send` 会抛 "Object has been destroyed"。
+ */
+function broadcastUpdateStatus(status: UpdateStatus): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue
+    win.webContents.send('update-status', status)
+  }
+}
+
+/**
+ * 自动更新控制器（模块级唯一实例）。
+ *
+ * 在这里构造是安全的：`createUpdater()` 只闭包持有状态与配置，真正的
+ * 监听绑定/网络动作都发生在 `init()` / `check()`（见 `startApplication`）。
+ * 与 `quickAddController` 同一模式，避免 IPC handler 还要处理「controller 可能不存在」。
+ *
+ * `isPackaged` 在模块加载时取值即可：打包与否在进程生命周期内不会变。
+ */
+const updater = createUpdater({
+  isPackaged: app.isPackaged,
+  getAutoUpdateEnabled: isAutoUpdateEnabled,
+  broadcast: broadcastUpdateStatus
+})
+
+/** `get-update-status` 的返回：状态机快照 + 应用版本 + 是否支持自动更新 */
+function buildUpdateSnapshot(): UpdateStatusSnapshot {
+  return {
+    ...updater.getStatus(),
+    currentVersion: updater.getCurrentVersion(),
+    enabled: app.isPackaged
+  }
+}
+
+/**
+ * 自动更新的 4 个 IPC 通道。
+ *
+ * 全部返回普通对象（`{ success, error }` 或状态快照），**不 throw**：
+ * 更新失败是常态（仓库还没发布过 release、断网、签名缺失……），
+ * 让渲染层为一个「预期内的失败」写 try/catch 只会诱使调用方忽略错误。
+ *
+ * 必须在窗口创建之前注册（与其它 IPC 一致）：渲染层一挂载就可能调用它们。
+ */
+function registerUpdaterHandlers(): void {
+  ipcMain.handle('get-update-status', () => buildUpdateSnapshot())
+
+  // 手动检查：`manual = true`，因此即使用户关闭了自动更新也允许（见 resolveCheckDecision）
+  ipcMain.handle('check-for-updates', () => updater.check(true))
+
+  ipcMain.handle('download-update', () => updater.download())
+
+  ipcMain.handle('install-update', () => {
+    // 先解除「关闭到托盘」的拦截：`quitAndInstall()` 内部走 `app.quit()`，
+    // 若主窗口的 close 仍被拦成 `hide()`，退出流程会被挂住 → 安装永远不开始。
+    const wasQuitting = isQuitting
+    isQuitting = true
+
+    const result = updater.install()
+    if (!result.success) {
+      isQuitting = wasQuitting
+    }
+    return result
+  })
+}
+
 /** 显示并聚焦主窗口（必要时重建 / 从最小化恢复）。托盘「显示主窗口」与全局快捷键共用。 */
 function showMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -341,7 +412,7 @@ function createWindow() {
 /**
  * 应用启动入口（拿到单实例锁之后才执行）。
  *
- * 顺序即依赖顺序：迁移 → CSP → IPC handlers → 窗口 / 托盘 → 全局快捷键。
+ * 顺序即依赖顺序：迁移 → CSP → IPC handlers → 窗口 / 托盘 → 全局快捷键 → 自动更新。
  * 抽成函数是为了让「第二个实例」能在**任何副作用发生之前**直接退出：
  * 顶层若散落着 `app.on` / `whenReady`，第二个实例会照样建窗、抢热键、打两遍迁移日志。
  */
@@ -394,6 +465,9 @@ function startApplication(): void {
     registerImportExportHandlers()
     // 死链检查：只读写 bookmarks.json，不依赖其它 IPC 通道，放在最后注册
     registerLinkHandlers()
+
+    // 自动更新：同样在建窗之前注册（渲染层设置页挂载即可能调用 `get-update-status`）
+    registerUpdaterHandlers()
 
     // 外壳（托盘 / 浮窗）专属的两个通道：注册顺序与其它 IPC 一致（窗口创建之前）——
     // 渲染层一挂载就可能调用它们，晚注册会得到 `No handler registered` 的 rejected Promise。
@@ -462,6 +536,15 @@ function startApplication(): void {
         console.warn(`[shortcut] Failed to register ${accelerator} (${label}):`, error)
       }
     }
+
+    // 自动更新放在启动流程的**最后**：
+    // 1) `init()` 只是配置 + 绑定 updater 事件（不发网络请求、不阻塞），但没必要抢在
+    //    迁移/建窗/托盘/快捷键之前；
+    // 2) `scheduleStartupCheck()` 只是排一个 10 秒后 unref 的定时器，放在最后能保证
+    //    「窗口已经能接收广播」之后再谈更新时间线。
+    // 未打包 / 用户关闭自动更新时，这两步都是空操作（状态停在 disabled/idle）。
+    updater.init()
+    updater.scheduleStartupCheck()
   })
 
   app.on('window-all-closed', () => {

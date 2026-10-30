@@ -22,7 +22,8 @@ const DEFAULT_SETTINGS: Settings = {
   availableBrowsers: [],
   defaultBrowser: '',
   faviconService: { ...DEFAULT_FAVICON_SERVICES },
-  useForeignFavicon: false
+  useForeignFavicon: false,
+  autoUpdate: true
 }
 
 /** 每次返回全新对象/数组，避免多个 store 调用方共享同一份可变引用。 */
@@ -131,7 +132,9 @@ export const useUIStore = defineStore('ui', () => {
         autoFetchIcon: settings.value.autoFetchIcon ?? true,
         language: settings.value.language || 'en',
         faviconService: settings.value.faviconService || DEFAULT_FAVICON_SERVICES,
-        useForeignFavicon: settings.value.useForeignFavicon ?? false
+        useForeignFavicon: settings.value.useForeignFavicon ?? false,
+        // 缺省视为开启（与主进程 DEFAULT_SETTINGS 一致）：老 settings.json 里没有这个字段
+        autoUpdate: settings.value.autoUpdate ?? true
       }
       settings.value = await window.electronAPI.updateSettings(settingsData)
       applyTheme(settings.value.theme, settings.value.themeColor)
@@ -167,7 +170,8 @@ export const useUIStore = defineStore('ui', () => {
         autoFetchIcon: defaults.autoFetchIcon,
         language: defaults.language,
         faviconService: { ...defaults.faviconService },
-        useForeignFavicon: defaults.useForeignFavicon
+        useForeignFavicon: defaults.useForeignFavicon,
+        autoUpdate: defaults.autoUpdate
       }
 
       settings.value = defaults

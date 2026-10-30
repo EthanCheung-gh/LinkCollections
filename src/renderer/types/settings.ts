@@ -31,4 +31,6 @@ export interface Settings {
   language: 'en' | 'zh'
   faviconService: FaviconService
   useForeignFavicon: boolean
+  /** 后台自动检查更新（关闭后设置页的「检查更新」按钮仍可用） */
+  autoUpdate: boolean
 }

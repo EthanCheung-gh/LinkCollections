@@ -25,6 +25,7 @@
     "@element-plus/icons-vue": "^2.3.1",
     "@types/lodash-es": "^4.17.12",
     "echarts": "^5.4.3",
+    "electron-updater": "^6.8.11",
     "element-plus": "^2.5.0",
     "lodash-es": "^4.17.22",
     "pinia": "^2.1.7",
@@ -80,6 +81,21 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "EthanCheung-gh",
+        "repo": "LinkCollections",
+        "releaseType": "release"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "public/icons/icon.png",
+      "category": "Utility"
     }
   }
 }

@@ -28,6 +28,8 @@ interface Settings {
     foreign: string
   }
   useForeignFavicon: boolean
+  /** 是否在后台自动检查更新（关闭后仍可用设置页的「检查更新」手动检查） */
+  autoUpdate: boolean
 }
 
 interface OpenBrowserResult {
@@ -51,18 +53,43 @@ const DEFAULT_SETTINGS: Settings = {
     domestic: 'direct',
     foreign: 'https://www.google.com/s2/favicons'
   },
-  useForeignFavicon: false
+  useForeignFavicon: false,
+  autoUpdate: true
 }
 
 // 只允许把 http(s) 链接交给浏览器/系统外壳
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:'])
 
+/**
+ * 读取设置时把缺省字段补齐。
+ *
+ * 旧版本的 `settings.json` 里没有 `autoUpdate` / `themeColor` / `faviconService`
+ * 这些后加的字段，直接原样返回会让渲染层拿到 `undefined`：
+ * 例如更新开关会显示成「关闭」，而 `isAutoUpdateEnabled()` 却按 `!== false` 判成「开启」，
+ * 界面与实际行为不一致。这里用 `DEFAULT_SETTINGS` 兜底，保证字段总是存在。
+ */
 function getSettings(): Settings {
-  return readJsonFile<Settings>(SETTINGS_FILE, DEFAULT_SETTINGS)
+  const stored = readJsonFile<Partial<Settings>>(SETTINGS_FILE, DEFAULT_SETTINGS)
+  return { ...DEFAULT_SETTINGS, ...stored }
 }
 
 function saveSettings(settings: Settings): boolean {
   return writeJsonFile(SETTINGS_FILE, settings)
+}
+
+/**
+ * 供主进程其它模块（`electron/updater.ts` 的后台检查闸门）读取「自动更新」开关。
+ *
+ * 为什么导出这个 getter 而不是让 `main.ts` 自己 `readJsonFile('settings.json', …)`：
+ * - 文件名/默认值只在这一处定义，避免两处硬编码 `'settings.json'` 漂移；
+ * - 不导出整个 `Settings`（渲染层可以写任意字段，主进程只需要一个布尔判断）；
+ * - 也不会产生循环依赖（本文件不 import main.ts / updater.ts）。
+ *
+ * `readJsonFile` 对缺失字段**不做**默认值补全，因此这里用 `!== false`：
+ * 老版本 `settings.json` 里没有 `autoUpdate` 时按默认值 `true` 处理。
+ */
+export function isAutoUpdateEnabled(): boolean {
+  return getSettings().autoUpdate !== false
 }
 
 /** 仅接受可被 `new URL()` 解析且协议为 http/https 的地址 */

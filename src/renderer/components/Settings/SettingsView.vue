@@ -206,6 +206,9 @@
         </div>
       </div>
 
+      <!-- 更新：紧跟「关于」（版本信息之后），且是自带 .settings-section 的独立区块 -->
+      <UpdateSection />
+
       <ImportExport />
 
       <div class="settings-section">
@@ -314,6 +317,7 @@ import ImportExport from './ImportExport.vue'
 import LinkCheckDialog from './LinkCheckDialog.vue'
 import MergeDuplicatesDialog from './MergeDuplicatesDialog.vue'
 import TrashDialog from './TrashDialog.vue'
+import UpdateSection from './UpdateSection.vue'
 import { planDuplicateMerges, type DuplicateMergePlan } from '../../../../shared/duplicates'
 import { DEFAULT_FAVICON_SERVICES } from '../../utils/favicon'
 import { THEME_COLORS } from '../../types/settings'
@@ -337,7 +341,8 @@ const localSettings = ref<Settings>({
   autoFetchIcon: true,
   language: 'en',
   faviconService: DEFAULT_FAVICON_SERVICES,
-  useForeignFavicon: false
+  useForeignFavicon: false,
+  autoUpdate: true
 })
 
 const defaultBrowserName = ref('')
@@ -394,7 +399,8 @@ const defaultSettings: Settings = {
   autoFetchIcon: true,
   language: 'en',
   faviconService: DEFAULT_FAVICON_SERVICES,
-  useForeignFavicon: false
+  useForeignFavicon: false,
+  autoUpdate: true
 }
 
 let isSaving = false
@@ -503,7 +509,10 @@ const saveSettings = async (showSuccess = true): Promise<boolean> => {
       language: localSettings.value.language,
       // v1.1.0 的 favicon 服务配置：原实现漏了这两项，导致选择后刷新即丢失
       faviconService: { ...localSettings.value.faviconService },
-      useForeignFavicon: localSettings.value.useForeignFavicon
+      useForeignFavicon: localSettings.value.useForeignFavicon,
+      // 自动更新开关由 UpdateSection 直接保存；这里一并序列化，
+      // 否则「恢复默认设置」会把 autoUpdate 留在旧值上（defaultSettings 里是 true）。
+      autoUpdate: localSettings.value.autoUpdate
     }
 
     const savedSettings = await window.electronAPI.updateSettings(settingsToSave)

@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { UpdaterActionResult, UpdateStatus, UpdateStatusSnapshot } from './updater'
 
 /**
- * IPC 通道总览（**31 → 35**，本文件与 `src/renderer/types/global.d.ts` 必须同步）：
+ * IPC 通道总览（**31 → 35 → 40**，本文件与 `src/renderer/types/global.d.ts` 必须同步）：
  *
  * - 原有 31 个 `invoke` 通道（书签 / 回收站 / 合并 / 死链 / 历史 / 文件夹 / 标签 / 设置 / 导入导出）；
  * - 新增 4 个「外壳」通道：
@@ -9,9 +10,16 @@ import { contextBridge, ipcRenderer } from 'electron'
  *   2. `notify-bookmarks-changed`（invoke，单向无返回）：主进程向**除发送者外**的所有窗口广播；
  *   3. `bookmarks-changed`（main → renderer，订阅式）：收到即重新拉取书签列表；
  *   4. `tray-open-view`（main → renderer，订阅式）：托盘「统计 / 设置」驱动视图切换。
+ * - 新增 5 个「自动更新」通道（本轮，35 → 40）：
+ *   5. `get-update-status`（invoke）：状态快照 + 当前版本 + 是否支持更新；
+ *   6. `check-for-updates`（invoke）：手动检查（用户关闭自动更新时仍可用）；
+ *   7. `download-update`（invoke）：下载已发现的新版本；
+ *   8. `install-update`（invoke）：`quitAndInstall()`；
+ *   9. `update-status`（main → renderer，订阅式）：主进程状态机广播。
  *
  * 2/3 是同一个动作的两半（渲染层发起 → 主进程扇出），计通道时按两个算，
- * 因此从 31 变成 35 而不是 34。订阅式通道必须返回取消订阅函数，否则热更新/组件重挂会叠加监听。
+ * 因此从 31 变成 35 而不是 34；自动更新同理是 4 个 invoke + 1 个事件订阅 = 5，故为 40。
+ * 订阅式通道必须返回取消订阅函数，否则热更新/组件重挂会叠加监听。
  */
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -111,6 +119,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('tray-open-view', handler)
     return () => {
       ipcRenderer.removeListener('tray-open-view', handler)
+    }
+  },
+  /**
+   * 自动更新（`electron-updater`）。
+   *
+   * 三个动作通道**恒 resolve**：主进程对更新失败统一返回 `{ success: false, error }`，
+   * 渲染层不需要 try/catch（更新失败是常态，不是异常）。
+   */
+  getUpdateStatus: (): Promise<UpdateStatusSnapshot> => ipcRenderer.invoke('get-update-status'),
+  checkForUpdates: (): Promise<UpdaterActionResult> => ipcRenderer.invoke('check-for-updates'),
+  downloadUpdate: (): Promise<UpdaterActionResult> => ipcRenderer.invoke('download-update'),
+  installUpdate: (): Promise<UpdaterActionResult> => ipcRenderer.invoke('install-update'),
+  /**
+   * 订阅更新状态广播（主进程 `webContents.send('update-status', status)`）。
+   *
+   * @returns 取消订阅函数：设置页组件 `onUnmounted` 必须调用，否则重挂会叠加监听。
+   */
+  onUpdateStatus: (listener: (status: UpdateStatus) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => listener(status)
+    ipcRenderer.on('update-status', handler)
+    return () => {
+      ipcRenderer.removeListener('update-status', handler)
     }
   }
 })

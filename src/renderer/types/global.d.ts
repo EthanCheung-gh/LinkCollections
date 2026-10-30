@@ -1,7 +1,7 @@
 /**
  * `window.electronAPI` 的类型契约。
  *
- * 必须与 `electron/preload.ts` 暴露的 31 + 4 = **35** 个方法**逐一对应**：
+ * 必须与 `electron/preload.ts` 暴露的 35 + 5 = **40** 个方法**逐一对应**：
  * openBrowser / getBookmarks / addBookmark / updateBookmark / deleteBookmark /
  * bulkUpdateBookmarks / bulkDeleteBookmarks / getDeletedBookmarks /
  * restoreBookmarks / purgeBookmarks / emptyTrash / mergeDuplicates / checkLinks /
@@ -9,16 +9,37 @@
  * getFolders / addFolder / updateFolder /
  * deleteFolder / clearAllFolders / getTags / addTag / updateTag / deleteTag /
  * clearAllTags / getSettings / updateSettings / exportData / importData /
- * closeQuickAdd / notifyBookmarksChanged / onBookmarksChanged / onTrayOpenView
+ * closeQuickAdd / notifyBookmarksChanged / onBookmarksChanged / onTrayOpenView /
+ * getUpdateStatus / checkForUpdates / downloadUpdate / installUpdate / onUpdateStatus
  *
  * 返回值均以对应 `ipcMain.handle` 的实际返回值为准；失败时主进程 `throw`，
  * 渲染进程侧表现为 rejected Promise（不是 `{ success: false }`）。
  *
+ * 例外是「自动更新」的 5 个方法：它们**恒 resolve**，失败通过
+ * `UpdaterActionResult.success === false` 表达（更新失败是常态，不该让调用方 try/catch）。
+ *
  * 后 4 个是「系统托盘 + 快速添加浮窗」引入的：
  * - `closeQuickAdd` / `notifyBookmarksChanged`：invoke，无返回值；
  * - `onBookmarksChanged` / `onTrayOpenView`：订阅式，返回**取消订阅函数**（不是 Promise）。
+ *
+ * 最后 5 个是「自动更新」引入的（4 invoke + 1 订阅式）。
  */
 import type { Bookmark, Folder, LinkStatus, Tag, Settings, VisitRecord } from './index'
+import type {
+  UpdaterActionResult,
+  UpdateState,
+  UpdateStatus,
+  UpdateStatusSnapshot
+} from '../../../electron/updater'
+
+/**
+ * 更新状态机与相关返回值的类型**定义在 `electron/updater.ts`**（单一来源：
+ * 主进程状态机与渲染层展示必须严格同一份形状），这里转出，便于渲染层只看 `types/global`。
+ *
+ * 注意：只能用 `import type`。渲染层绝不能把 `electron/updater.ts` 的**运行期代码**
+ * 打进 bundle（它会 require('electron') 与 'electron-updater'）。
+ */
+export type { UpdaterActionResult, UpdateState, UpdateStatus, UpdateStatusSnapshot }
 
 /**
  * `Bookmark.linkStatus` 的形状定义在 `types/bookmark.ts`（与字段所有者放在一起），
@@ -216,6 +237,29 @@ export interface ElectronAPI {
    * @returns 取消订阅函数（同上）。
    */
   onTrayOpenView: (listener: (view: 'stats' | 'settings') => void) => () => void
+  /**
+   * `get-update-status`：更新状态快照 + 当前版本 + 是否支持自动更新（打包环境）。
+   *
+   * 恒 resolve：未打包时就是 `{ state: 'disabled', enabled: false }`。
+   */
+  getUpdateStatus: () => Promise<UpdateStatusSnapshot>
+  /**
+   * `check-for-updates`：手动检查更新。
+   *
+   * 用户关闭「自动更新」时**仍然可用**（该设置只约束后台静默检查）。
+   * 失败返回 `{ success: false, error }`，同时主进程会广播 `error` 状态。
+   */
+  checkForUpdates: () => Promise<UpdaterActionResult>
+  /** `download-update`：下载已发现的新版本（`autoDownload = false`，必须显式调用）。 */
+  downloadUpdate: () => Promise<UpdaterActionResult>
+  /** `install-update`：`quitAndInstall()`；成功后应用会退出并安装，不会 resolve 到 UI。 */
+  installUpdate: () => Promise<UpdaterActionResult>
+  /**
+   * 订阅更新状态广播（主进程 `webContents.send('update-status', status)`）。
+   *
+   * @returns 取消订阅函数 —— 组件卸载时必须调用。
+   */
+  onUpdateStatus: (listener: (status: UpdateStatus) => void) => () => void
 }
 
 declare global {
