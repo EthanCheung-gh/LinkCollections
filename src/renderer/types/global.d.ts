@@ -1,8 +1,9 @@
 /**
  * `window.electronAPI` 的类型契约。
  *
- * 必须与 `electron/preload.ts` 暴露的 21 个方法**逐一对应**（审计 H4 结论：21/21 通道已匹配）：
+ * 必须与 `electron/preload.ts` 暴露的 23 个方法**逐一对应**：
  * openBrowser / getBookmarks / addBookmark / updateBookmark / deleteBookmark /
+ * bulkUpdateBookmarks / bulkDeleteBookmarks /
  * incrementVisitCount / clearAllBookmarks / getFolders / addFolder / updateFolder /
  * deleteFolder / clearAllFolders / getTags / addTag / updateTag / deleteTag /
  * clearAllTags / getSettings / updateSettings / exportData / importData
@@ -35,6 +36,33 @@ export interface ImportResult {
   }
 }
 
+/**
+ * `bulk-update-bookmarks` 的补丁契约（与 `electron/ipc/bookmarks.ts` 的
+ * `BulkBookmarkPatch` **字段一致但不跨端 import**：主进程与渲染层各自持有定义，
+ * 避免渲染层把 electron 侧代码打进 bundle）。
+ *
+ * `folderId: ''` 是有效值（= 未分类）；`color: ''` 视为未提供（不能批量清空颜色）。
+ */
+export interface BulkBookmarkPatch {
+  folderId?: string
+  color?: string
+  pinned?: boolean
+  addTags?: string[]
+  removeTags?: string[]
+}
+
+/** `bulk-update-bookmarks` 的返回：真正改动的记录 + 未找到的 id（不视为错误）。 */
+export interface BulkUpdateBookmarksResult {
+  updated: Bookmark[]
+  missing: string[]
+}
+
+/** `bulk-delete-bookmarks` 的返回：实际删除条数 + 未找到的 id。 */
+export interface BulkDeleteBookmarksResult {
+  deleted: number
+  missing: string[]
+}
+
 export interface ElectronAPI {
   /** `open-browser`：失败可能 reject（主进程校验/启动失败）。 */
   openBrowser: (url: string, browserPath?: string) => Promise<void>
@@ -42,6 +70,16 @@ export interface ElectronAPI {
   addBookmark: (bookmark: Partial<Bookmark>) => Promise<Bookmark>
   updateBookmark: (id: string, bookmark: Partial<Bookmark>) => Promise<Bookmark>
   deleteBookmark: (id: string) => Promise<void>
+  /**
+   * `bulk-update-bookmarks`：一次 IPC 完成 N 条更新（主进程一次读 + 一次写）。
+   * 空 ids / 空 patch 时返回 `{ updated: [], missing: [] }` 且不写盘。
+   */
+  bulkUpdateBookmarks: (
+    ids: string[],
+    patch: BulkBookmarkPatch
+  ) => Promise<BulkUpdateBookmarksResult>
+  /** `bulk-delete-bookmarks`：`deleted` 为实际删除条数，`missing` 为未找到的 id。 */
+  bulkDeleteBookmarks: (ids: string[]) => Promise<BulkDeleteBookmarksResult>
   /** `increment-visit-count`：返回更新后的书签（含新的 visitCount/lastVisited）。 */
   incrementVisitCount: (id: string) => Promise<Bookmark>
   /** `clearAllBookmarks`：成功恒为 `true`，失败 reject。 */

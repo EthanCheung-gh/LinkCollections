@@ -79,6 +79,19 @@
     "tagColor": "标签颜色",
     "noTags": "暂无标签"
   },
+  "bulk": {
+    "select": "选择",
+    "cancelSelection": "取消选择",
+    "selected": "已选 {count} 项",
+    "moveToFolder": "移动到文件夹",
+    "addTags": "添加标签",
+    "removeTags": "移除标签",
+    "setColor": "设置颜色",
+    "delete": "删除",
+    "deleteConfirm": "确定删除选中的 {count} 个书签吗？此操作不可撤销。",
+    "apply": "应用",
+    "uncategorized": "未分类"
+  },
   "search": {
     "placeholder": "搜索书签...",
     "searchShortcut": "按 Ctrl+K 搜索",
@@ -232,6 +245,8 @@
     "tagDeleteFailed": "删除标签失败",
     "allCleared": "所有数据已清空",
     "settingsLoadFailed": "加载设置失败",
-    "settingsSaveFailed": "保存设置失败"
+    "settingsSaveFailed": "保存设置失败",
+    "bulkUpdated": "已更新 {count} 个书签",
+    "bulkDeleted": "已删除 {count} 个书签"
   }
 }

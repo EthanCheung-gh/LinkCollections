@@ -29,6 +29,10 @@
       />
     </div>
 
+    <Transition name="bulk-bar">
+      <BulkActionBar v-if="isSelecting" />
+    </Transition>
+
     <EditDialog
       v-model="editDialogVisible"
       :bookmark="editingBookmark"
@@ -40,8 +44,14 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
-import { useBookmarkStore, useFolderStore, useTagStore } from '../../stores'
+import {
+  useBookmarkStore,
+  useFolderStore,
+  useSelectionStore,
+  useTagStore
+} from '../../stores'
 import BookmarkCard from './BookmarkCard.vue'
+import BulkActionBar from './BulkActionBar.vue'
 import EditDialog from '../Modal/EditDialog.vue'
 import type { Bookmark } from '../../types'
 
@@ -58,9 +68,12 @@ const { t } = useI18n()
 const bookmarkStore = useBookmarkStore()
 const folderStore = useFolderStore()
 const tagStore = useTagStore()
+const selectionStore = useSelectionStore()
 const { bookmarks } = storeToRefs(bookmarkStore)
 const { currentFolderSubtreeIds } = storeToRefs(folderStore)
 const { selectedTagIds } = storeToRefs(tagStore)
+// 选择模式下网格下方渲染批量条（不参与空态/网格逻辑）
+const { isSelecting } = storeToRefs(selectionStore)
 
 const editDialogVisible = ref(false)
 const editingBookmark = ref<any>(null)

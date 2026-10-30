@@ -1,13 +1,26 @@
 <template>
   <div
     class="bookmark-card"
+    :class="{ selected: isSelecting && isSelected }"
     :style="{ '--card-accent': cardAccent }"
+    @click="handleCardClick"
   >
     <div class="card-header">
       <div
+        v-if="isSelecting"
+        class="select-toggle"
+        @click.stop
+      >
+        <el-checkbox
+          :model-value="isSelected"
+          :aria-label="bookmark.title"
+          @change="handleToggleSelect"
+        />
+      </div>
+      <div
         class="favicon-wrapper"
         :title="t('bookmark.refreshFavicon')"
-        @click="refreshFavicon"
+        @click.stop="handleFaviconClick"
       >        <img
           v-if="bookmark.favicon"
           :src="bookmark.favicon"
@@ -36,9 +49,9 @@
           class="i-heroicons-star-solid pinned-mark"
           aria-hidden="true"
         />
-        <span class="title" @click.stop v-html="highlightedTitle" />
+        <span class="title" v-html="highlightedTitle" />
       </h3>
-      <p class="description" @click.stop v-html="highlightedDescription" />
+      <p class="description" v-html="highlightedDescription" />
     </div>
 
     <div v-if="bookmarkTags.length > 0" class="card-tags">
@@ -47,18 +60,18 @@
         :key="tag.id"
         class="tag"
         :style="{ backgroundColor: tagBackgroundColor(tag.color), color: tagTextColor(tag.color) }"
-        @click.stop
       >
         {{ tag.name }}
       </span>
     </div>
 
-    <div class="card-footer" @click.stop>
+    <div class="card-footer" @click.stop="handleCardClick">
       <div class="visit-count">
         <i class="i-heroicons-chart-bar" />
         <span>{{ bookmark.visitCount }}</span>
       </div>
-      <div class="actions">
+      <!-- 选择模式下隐藏置顶按钮与「更多」菜单：此时点击卡片 = 切换选中 -->
+      <div v-if="!isSelecting" class="actions">
         <el-button
           text
           size="small"
@@ -114,7 +127,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
 import type { Bookmark, Tag } from '../../types'
-import { useBookmarkStore, useTagStore, useUIStore } from '../../stores'
+import { useBookmarkStore, useSelectionStore, useTagStore, useUIStore } from '../../stores'
 import { highlightText } from '../../utils/highlight'
 import { getFaviconUrl } from '../../utils/favicon'
 import { isValidColor } from '../../utils/validation'
@@ -138,9 +151,27 @@ const { t } = useI18n()
 const bookmarkStore = useBookmarkStore()
 const tagStore = useTagStore()
 const uiStore = useUIStore()
+const selectionStore = useSelectionStore()
 const { tags } = storeToRefs(tagStore)
 const { settings } = storeToRefs(uiStore)
+const { isSelecting } = storeToRefs(selectionStore)
 const { incrementVisitCount } = bookmarkStore
+
+/** 当前卡片是否被选中（选择模式下才可能有意义） */
+const isSelected = computed(() => selectionStore.isSelected(props.bookmark.id))
+
+const handleToggleSelect = () => {
+  selectionStore.toggle(props.bookmark.id)
+}
+
+/**
+ * 卡片点击：选择模式下 = 切换选中；常规模式下保持原行为（本函数什么都不做，
+ * 打开链接仍然只由 `.url-link` 的点击负责）。
+ */
+const handleCardClick = () => {
+  if (!isSelecting.value) return
+  selectionStore.toggle(props.bookmark.id)
+}
 
 const browsers = computed(() => {
   if (!settings.value?.availableBrowsers) return []
@@ -201,6 +232,12 @@ const formatLastVisitedDate = (date: string) => {
 }
 
 const handleUrlClick = async () => {
+  // 选择模式下点击卡片 = 切换选中，不打开链接
+  if (isSelecting.value) {
+    selectionStore.toggle(props.bookmark.id)
+    return
+  }
+
   await incrementVisitCount(props.bookmark.id)
 
   const defaultBrowser = settings.value?.defaultBrowser || ''
@@ -208,6 +245,15 @@ const handleUrlClick = async () => {
     typeof defaultBrowser === 'string' ? defaultBrowser : defaultBrowser?.path || ''
 
   await window.electronAPI.openBrowser(props.bookmark.url, browserPath)
+}
+
+/** 图标点击：选择模式下同样只切换选中，避免误触发「刷新图标」 */
+const handleFaviconClick = () => {
+  if (isSelecting.value) {
+    selectionStore.toggle(props.bookmark.id)
+    return
+  }
+  refreshFavicon()
 }
 
 const handleFaviconError = (bookmark: Bookmark) => {
@@ -300,6 +346,28 @@ const handleMoreAction = async (command: string) => {
 .bookmark-card:hover {
   box-shadow: var(--lc-shadow-raised);
   transform: translateY(-2px);
+}
+
+/*
+ * 选中态描边：用 outline + 负 offset（画在盒子内侧），
+ * 不占布局空间 → 卡片尺寸与未选中时完全一致（不会让网格跳动）。
+ */
+.bookmark-card.selected {
+  outline: 2px solid var(--lc-accent);
+  outline-offset: -2px;
+}
+
+/* 选择模式下复选框占用卡片首行左侧；仅在选择模式出现，普通模式布局不变 */
+.select-toggle {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 20px;
+}
+
+.select-toggle :deep(.el-checkbox) {
+  height: 20px;
+  margin-right: 0;
 }
 
 .card-header {

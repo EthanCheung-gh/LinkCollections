@@ -8,6 +8,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateBookmark: (id: string, bookmark: any) =>
     ipcRenderer.invoke('update-bookmark', id, bookmark),
   deleteBookmark: (id: string) => ipcRenderer.invoke('delete-bookmark', id),
+  /**
+   * 批量通道：一次 IPC = 主进程一次读 + 一次写。
+   * 渲染层**不要**循环调用单个 update/delete（每个单条写操作都会重写整个 JSON）。
+   */
+  bulkUpdateBookmarks: (ids: string[], patch: any) =>
+    ipcRenderer.invoke('bulk-update-bookmarks', ids, patch),
+  bulkDeleteBookmarks: (ids: string[]) => ipcRenderer.invoke('bulk-delete-bookmarks', ids),
   incrementVisitCount: (id: string) => ipcRenderer.invoke('increment-visit-count', id),
   clearAllBookmarks: () => ipcRenderer.invoke('clearAllBookmarks'),
   getFolders: () => ipcRenderer.invoke('get-folders'),

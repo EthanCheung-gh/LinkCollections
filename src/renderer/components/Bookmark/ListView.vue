@@ -15,170 +15,208 @@
       </p>
     </div>
 
-    <el-table
+    <!--
+      表格放进独立的滚动容器：批量条要固定在内容区底部，
+      只有把「可滚动区域」和「底部条」分开，长列表才不会把批量条顶出可视区。
+    -->
+    <div
       v-else
-      :data="filteredBookmarks"
-      stripe
-      style="width: 100%"
-      @sort-change="handleSortChange"
+      class="table-scroll"
     >
-      <el-table-column width="50">
-        <template #default="{ row }">
-          <div
-            class="favicon-cell"
-            :title="t('bookmark.refreshFavicon')"
-            @click="refreshFavicon(row)"
-          >            <img
-              v-if="row.favicon"
-              :src="row.favicon"
-              :alt="row.title"
-              class="favicon-small"
-              @error="handleFaviconError(row)"
-            />
-            <i v-else class="i-heroicons-globe-alt default-icon-small" />
-          </div>
-        </template>
-      </el-table-column>
+      <el-table
+        ref="tableRef"
+        :key="tableKey"
+        :data="filteredBookmarks"
+        row-key="id"
+        stripe
+        style="width: 100%"
+        @sort-change="handleSortChange"
+        @selection-change="handleSelectionChange"
+        @row-click="handleRowClick"
+      >
+        <!-- 选中模式下才出现勾选列（row-key + :key 重建，避免动态列残留） -->
+        <el-table-column
+          v-if="isSelecting"
+          type="selection"
+          width="46"
+        />
 
-      <el-table-column prop="title" label="Title" min-width="200">
-        <template #default="{ row }">
-          <div class="title-cell">
-            <div class="title-line">
-              <i
-                v-if="row.pinned"
-                class="i-heroicons-star-solid pinned-mark"
-                aria-hidden="true"
+        <el-table-column width="50">
+          <template #default="{ row }">
+            <div
+              class="favicon-cell"
+              :title="t('bookmark.refreshFavicon')"
+              @click="refreshFavicon(row)"
+            >            <img
+                v-if="row.favicon"
+                :src="row.favicon"
+                :alt="row.title"
+                class="favicon-small"
+                @error="handleFaviconError(row)"
               />
+              <i v-else class="i-heroicons-globe-alt default-icon-small" />
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="title" label="Title" min-width="200">
+          <template #default="{ row }">
+            <div class="title-cell">
+              <div class="title-line">
+                <i
+                  v-if="row.pinned"
+                  class="i-heroicons-star-solid pinned-mark"
+                  aria-hidden="true"
+                />
+                <div
+                  class="title"
+                  @click="handleUrlClick(row)"
+                  v-html="highlightText(row.title, props.searchQuery)"
+                />
+              </div>
               <div
-                class="title"
+                class="url"
                 @click="handleUrlClick(row)"
-                v-html="highlightText(row.title, props.searchQuery)"
+                v-html="highlightText(row.url, props.searchQuery)"
               />
             </div>
-            <div
-              class="url"
-              @click="handleUrlClick(row)"
-              v-html="highlightText(row.url, props.searchQuery)"
-            />
-          </div>
-        </template>
-      </el-table-column>
+          </template>
+        </el-table-column>
 
-      <el-table-column
-        prop="description"
-        label="Description"
-        min-width="250"
-        class-name="responsive-col"
-      >
-        <template #default="{ row }">
-          <div class="description-cell">
-            <span v-html="highlightText(row.description || '-', props.searchQuery)" />
-          </div>
-        </template>
-      </el-table-column>
+        <el-table-column
+          prop="description"
+          label="Description"
+          min-width="250"
+          class-name="responsive-col"
+        >
+          <template #default="{ row }">
+            <div class="description-cell">
+              <span v-html="highlightText(row.description || '-', props.searchQuery)" />
+            </div>
+          </template>
+        </el-table-column>
 
-      <el-table-column prop="tags" label="Tags" width="200" class-name="responsive-col">
-        <template #default="{ row }">
-          <div class="tags-cell">
-            <el-tag
-              v-for="tagId in row.tags"
-              :key="tagId"
-              size="small"
-              :color="tagBackgroundColor(getTagColor(tagId))"
-              effect="plain"
-            >
-              <span v-html="highlightText(getTagName(tagId), props.searchQuery)" />
-            </el-tag>
-            <span v-if="row.tags.length === 0" class="no-tags">-</span>
-          </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column prop="visitCount" label="Visits" width="80" sortable="custom">
-        <template #default="{ row }">
-          <div class="visits-cell">
-            <i class="i-heroicons-chart-bar" />
-            <span>{{ row.visitCount || 0 }}</span>
-          </div>
-        </template>
-      </el-table-column>
-
-      <el-table-column
-        prop="lastVisited"
-        :label="t('bookmark.lastVisited')"
-        width="120"
-        sortable="custom"
-      >        <template #default="{ row }">
-          <span class="last-visited-cell">
-            {{ row.lastVisited ? formatLastVisited(row.lastVisited) : '-' }}
-          </span>
-        </template>
-      </el-table-column>
-
-      <el-table-column label="Actions" width="100" fixed="right">
-        <template #default="{ row }">
-          <div class="actions-cell">
-            <el-dropdown
-              trigger="click"
-              @command="(cmd: string) => handleAction(cmd, row)"
-            >
-              <el-button
-                text
+        <el-table-column prop="tags" label="Tags" width="200" class-name="responsive-col">
+          <template #default="{ row }">
+            <div class="tags-cell">
+              <el-tag
+                v-for="tagId in row.tags"
+                :key="tagId"
                 size="small"
+                :color="tagBackgroundColor(getTagColor(tagId))"
+                effect="plain"
               >
-                <i class="i-heroicons-ellipsis-horizontal" />
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="edit">
-                    <i class="i-heroicons-pencil mr-2" />
-                    Edit
-                  </el-dropdown-item>
-                  <el-dropdown-item command="share">
-                    <i class="i-heroicons-share mr-2" />
-                    Share
-                  </el-dropdown-item>
-                  <el-dropdown-item
-                    divided
-                    command="open-default"
-                  >
-                    <i class="i-heroicons-arrow-top-right-on-square mr-2" />
-                    Open in Default Browser
-                  </el-dropdown-item>
-                  <el-dropdown-item
-                    v-for="(browser, index) in browsers"
-                    :key="index"
-                    :command="`open-browser-${index}`"
-                  >
-                    <i class="i-heroicons-globe-alt mr-2" />
-                    {{ browser.name || `Browser ${index + 1}` }}
-                  </el-dropdown-item>
-                  <el-dropdown-item
-                    divided
-                    command="delete"
-                  >
-                    <i class="i-heroicons-trash mr-2" />
-                    Delete
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>        </template>
-      </el-table-column>
-    </el-table>
+                <span v-html="highlightText(getTagName(tagId), props.searchQuery)" />
+              </el-tag>
+              <span v-if="row.tags.length === 0" class="no-tags">-</span>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="visitCount" label="Visits" width="80" sortable="custom">
+          <template #default="{ row }">
+            <div class="visits-cell">
+              <i class="i-heroicons-chart-bar" />
+              <span>{{ row.visitCount || 0 }}</span>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column
+          prop="lastVisited"
+          :label="t('bookmark.lastVisited')"
+          width="120"
+          sortable="custom"
+        >        <template #default="{ row }">
+            <span class="last-visited-cell">
+              {{ row.lastVisited ? formatLastVisited(row.lastVisited) : '-' }}
+            </span>
+          </template>
+        </el-table-column>
+
+        <el-table-column
+          v-if="!isSelecting"
+          label="Actions"
+          width="100"
+          fixed="right"
+        >
+          <template #default="{ row }">
+            <div class="actions-cell">
+              <el-dropdown
+                trigger="click"
+                @command="(cmd: string) => handleAction(cmd, row)"
+              >
+                <el-button
+                  text
+                  size="small"
+                >
+                  <i class="i-heroicons-ellipsis-horizontal" />
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="edit">
+                      <i class="i-heroicons-pencil mr-2" />
+                      Edit
+                    </el-dropdown-item>
+                    <el-dropdown-item command="share">
+                      <i class="i-heroicons-share mr-2" />
+                      Share
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      divided
+                      command="open-default"
+                    >
+                      <i class="i-heroicons-arrow-top-right-on-square mr-2" />
+                      Open in Default Browser
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      v-for="(browser, index) in browsers"
+                      :key="index"
+                      :command="`open-browser-${index}`"
+                    >
+                      <i class="i-heroicons-globe-alt mr-2" />
+                      {{ browser.name || `Browser ${index + 1}` }}
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      divided
+                      command="delete"
+                    >
+                      <i class="i-heroicons-trash mr-2" />
+                      Delete
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <Transition name="bulk-bar">
+      <BulkActionBar v-if="isSelecting" />
+    </Transition>
 
     <EditDialog v-model="editDialogVisible" :bookmark="editingBookmark" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
+import type { TableColumnCtx, TableInstance } from 'element-plus'
 import { storeToRefs } from 'pinia'
-import { useBookmarkStore, useFolderStore, useTagStore, useUIStore } from '../../stores'
+import {
+  useBookmarkStore,
+  useFolderStore,
+  useSelectionStore,
+  useTagStore,
+  useUIStore
+} from '../../stores'
 import { highlightText } from '../../utils/highlight'
 import { getFaviconUrl } from '../../utils/favicon'
 import { isValidColor } from '../../utils/validation'
+import BulkActionBar from './BulkActionBar.vue'
 import EditDialog from '../Modal/EditDialog.vue'
 import type { Bookmark } from '../../types'
 import { useI18n } from 'vue-i18n'
@@ -197,11 +235,20 @@ const bookmarkStore = useBookmarkStore()
 const folderStore = useFolderStore()
 const tagStore = useTagStore()
 const uiStore = useUIStore()
+const selectionStore = useSelectionStore()
 const { bookmarks } = storeToRefs(bookmarkStore)
 const { currentFolderSubtreeIds } = storeToRefs(folderStore)
 const { tags, selectedTagIds } = storeToRefs(tagStore)
 const { settings } = storeToRefs(uiStore)
+const { isSelecting } = storeToRefs(selectionStore)
 const { deleteBookmark, incrementVisitCount } = bookmarkStore
+
+/**
+ * 选择模式切换时强制重建表格（`:key`）：勾选列 / Actions 列都是条件渲染的，
+ * 动态增删列在 el-table 里依赖内部列注册，重建是最确定的路径。
+ */
+const tableKey = computed(() => (isSelecting.value ? 'with-selection' : 'default'))
+const tableRef = ref<TableInstance>()
 
 const editDialogVisible = ref(false)
 const editingBookmark = ref<Bookmark | null>(null)
@@ -277,6 +324,88 @@ const filteredBookmarks = computed(() => {
   return pinnedFirst(filtered)
 })
 
+/* =============================================================================
+ * 与 selection store 的双向同步（el-table type="selection" 只是「投影」）
+ *
+ * - store → 表格：`applySelectionToTable()` 用 `toggleRowSelection(row, bool)` 回填，
+ *   进入选择模式、退出、过滤条件变化后都重新对齐一次；
+ * - 表格 → store：`handleSelectionChange` 只同步**当前可见**的行，
+ *   被搜索/标签过滤隐藏的已选 id 必须保留（产品约定 4：计数要真实）。
+ *
+ * 程序化回填会同步触发 el-table 的 `selection-change`（EP 内部是同步 emit），
+ * 用 `applyingFromStore` 闸门屏蔽这一轮回流，避免「回填 → 回写 store → 再回填」的抖动。
+ * ========================================================================== */
+let applyingFromStore = false
+
+/** 把 store 里的选中集合投影到当前表格（只处理当前 data 里的行） */
+const applySelectionToTable = () => {
+  const table = tableRef.value
+  if (!table || !isSelecting.value) return
+  applyingFromStore = true
+  try {
+    for (const row of filteredBookmarks.value) {
+      table.toggleRowSelection(row, selectionStore.isSelected(row.id))
+    }
+  } finally {
+    applyingFromStore = false
+  }
+}
+
+/** 表格 → store：保留被过滤隐藏的已选 id，只替换可见部分 */
+const handleSelectionChange = (rows: Bookmark[]) => {
+  if (applyingFromStore) return
+  if (!isSelecting.value) return
+
+  const visibleIds = new Set(filteredBookmarks.value.map(bookmark => bookmark.id))
+  const next = new Set<string>()
+  for (const id of selectionStore.selectedIds) {
+    if (!visibleIds.has(id)) next.add(id)
+  }
+  for (const row of rows) {
+    if (visibleIds.has(row.id)) next.add(row.id)
+  }
+
+  const changed =
+    next.size !== selectionStore.count || [...next].some(id => !selectionStore.isSelected(id))
+  if (changed) {
+    selectionStore.selectAll([...next])
+  }
+}
+
+/** 行点击 = 切换选中（勾选列自己会写 store，跳过以免双触发） */
+const handleRowClick = (row: Bookmark, column?: TableColumnCtx<Bookmark>) => {
+  if (!isSelecting.value) return
+  if (column && column.type === 'selection') return
+  selectionStore.toggle(row.id)
+}
+
+// store → 表格：选择模式切换（表格会按 :key 重建）与选中集合变化都在 DOM 更新后回填
+watch(
+  [() => isSelecting.value, () => selectionStore.selectedIds],
+  () => {
+    if (!isSelecting.value) {
+      // 退出选择模式：清掉表格内部选中态（勾选列也会随之被移除）
+      tableRef.value?.clearSelection()
+      return
+    }
+    void nextTick(applySelectionToTable)
+  },
+  { flush: 'post' }
+)
+
+// 过滤/排序改变了可见行集合后，重新把选中态投影上去（否则勾选会「消失」）
+watch(
+  filteredBookmarks,
+  () => {
+    void nextTick(applySelectionToTable)
+  },
+  { flush: 'post' }
+)
+
+onMounted(() => {
+  void nextTick(applySelectionToTable)
+})
+
 const handleEdit = (bookmark: Bookmark) => {
   editingBookmark.value = bookmark
   editDialogVisible.value = true
@@ -289,6 +418,9 @@ const handleShare = (bookmark: Bookmark) => {
 }
 
 const handleUrlClick = async (bookmark: Bookmark) => {
+  // 选择模式下不打开链接：交给 row-click 统一处理「切换选中」
+  if (isSelecting.value) return
+
   const defaultBrowser = settings.value?.defaultBrowser || ''
   const browserPath =
     typeof defaultBrowser === 'string' ? defaultBrowser : defaultBrowser?.path || ''
@@ -363,6 +495,9 @@ const handleFaviconError = (bookmark: Bookmark) => {
 }
 
 const refreshFavicon = (bookmark: Bookmark) => {
+  // 选择模式下点图标不刷新 favicon：交给 row-click 统一「切换选中」
+  if (isSelecting.value) return
+
   const newFavicon = getFaviconUrl(
     bookmark.url,
     settings.value?.faviconService,
@@ -413,6 +548,17 @@ const tagBackgroundColor = (color?: string | null): string => {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+/*
+ * 表格的滚动容器：让「表格区」占满剩余高度并自己滚动，
+ * 底部的批量条（BulkActionBar）才能稳定停在内容区底部，而不是被长列表顶出可视区。
+ */
+.table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* 空态在内容区可用高度内垂直 + 水平居中（不再用 min-height:400px） */

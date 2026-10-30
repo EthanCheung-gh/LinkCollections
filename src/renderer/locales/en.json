@@ -79,6 +79,19 @@
     "tagColor": "Tag Color",
     "noTags": "No tags yet"
   },
+  "bulk": {
+    "select": "Select",
+    "cancelSelection": "Cancel selection",
+    "selected": "{count} selected",
+    "moveToFolder": "Move to folder",
+    "addTags": "Add tags",
+    "removeTags": "Remove tags",
+    "setColor": "Set color",
+    "delete": "Delete",
+    "deleteConfirm": "Delete {count} selected bookmarks? This cannot be undone.",
+    "apply": "Apply",
+    "uncategorized": "Uncategorized"
+  },
   "search": {
     "placeholder": "Search bookmarks...",
     "searchShortcut": "Press Ctrl+K to search",
@@ -232,6 +245,8 @@
     "tagDeleteFailed": "Failed to delete tag",
     "allCleared": "All data cleared successfully",
     "settingsLoadFailed": "Failed to load settings",
-    "settingsSaveFailed": "Failed to save settings"
+    "settingsSaveFailed": "Failed to save settings",
+    "bulkUpdated": "{count} bookmarks updated",
+    "bulkDeleted": "{count} bookmarks deleted"
   }
 }

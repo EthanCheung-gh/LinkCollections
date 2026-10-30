@@ -1,5 +1,6 @@
 export * from './folder'
 export * from './tag'
 export * from './bookmark'
+export * from './selection'
 export * from './ui'
 export * from './search'

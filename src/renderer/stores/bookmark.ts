@@ -1,8 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Bookmark } from '../types'
+import type { BulkBookmarkPatch } from '../types/global'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
+
+/**
+ * 批量补丁：直接复用 `types/global.d.ts` 里的 IPC 契约类型，
+ * 保证渲染层传给 preload 的对象形状与主进程白名单一致（不跨端 import）。
+ */
+export type BulkPatch = BulkBookmarkPatch
 
 export const useBookmarkStore = defineStore('bookmark', () => {
   const { t } = useI18n()
@@ -128,6 +135,62 @@ export const useBookmarkStore = defineStore('bookmark', () => {
     }
   }
 
+  /**
+   * 批量更新（移动文件夹 / 追加标签 / 移除标签 / 设置颜色 / 置顶）。
+   *
+   * **一次 IPC = 主进程一次读 + 一次写**：不要在渲染层循环调用 `updateBookmark`，
+   * 每次单条更新都会重写整个 bookmarks.json（20 条 = 20 次读 + 20 次写）。
+   *
+   * 成功只发**一条**汇总 toast（`message.bulkUpdated`，带实际更新条数）；
+   * 失败提示 `message.bookmarkUpdateFailed` 并 rethrow，由调用方决定是否保留选中态。
+   * 返回实际更新条数（主进程返回的 `updated.length`，不含 `missing`）。
+   *
+   * 说明：这里**不**直接操作 selection store —— 选择模式由调用方（BulkActionBar）
+   * 在执行成功后 `exit()`，store 之间保持单向依赖（folder/tag → bookmark），无环。
+   */
+  const bulkUpdate = async (ids: string[], patch: BulkPatch): Promise<number> => {
+    try {
+      const result = await window.electronAPI.bulkUpdateBookmarks(ids, patch)
+      const updatedList = Array.isArray(result?.updated) ? result.updated : []
+
+      if (updatedList.length > 0) {
+        // 逐条替换进本地数组（按 id 建索引，避免 O(n²) 的 findIndex）
+        const updatedById = new Map(updatedList.map(bookmark => [bookmark.id, bookmark]))
+        bookmarks.value = bookmarks.value.map(bookmark => updatedById.get(bookmark.id) ?? bookmark)
+      }
+
+      // 注意参数名是 count：i18n 里 bulkUpdated 需要 {count}
+      ElMessage.success(t('message.bulkUpdated', { count: updatedList.length }))
+      return updatedList.length
+    } catch (error) {
+      ElMessage.error(t('message.bookmarkUpdateFailed'))
+      console.error(error)
+      throw error
+    }
+  }
+
+  /**
+   * 批量删除：同样**一次 IPC = 一次读 + 一次写**。
+   * 本地按请求的 id 移除（主进程会删掉其中所有存在的记录），
+   * toast 用主进程返回的 `deleted`（真实删除条数）。
+   */
+  const bulkDelete = async (ids: string[]): Promise<number> => {
+    try {
+      const result = await window.electronAPI.bulkDeleteBookmarks(ids)
+      const deleted = typeof result?.deleted === 'number' ? result.deleted : ids.length
+
+      const removedIds = new Set(ids)
+      bookmarks.value = bookmarks.value.filter(bookmark => !removedIds.has(bookmark.id))
+
+      ElMessage.success(t('message.bulkDeleted', { count: deleted }))
+      return deleted
+    } catch (error) {
+      ElMessage.error(t('message.bookmarkDeleteFailed'))
+      console.error(error)
+      throw error
+    }
+  }
+
   const incrementVisitCount = async (id: string) => {
     try {
       // 类型来自 types/global.d.ts 的 ElectronAPI.incrementVisitCount，
@@ -184,6 +247,8 @@ export const useBookmarkStore = defineStore('bookmark', () => {
     updateBookmark,
     togglePin,
     deleteBookmark,
+    bulkUpdate,
+    bulkDelete,
     incrementVisitCount,
     clearAllBookmarks,
     searchBookmarks
