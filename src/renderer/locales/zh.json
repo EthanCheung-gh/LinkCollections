@@ -17,7 +17,8 @@
     "success": "成功",
     "error": "错误",
     "warning": "警告",
-    "info": "提示"
+    "info": "提示",
+    "actions": "操作"
   },
   "sidebar": {
     "allBookmarks": "全部书签",
@@ -55,7 +56,8 @@
     "unknown": "未知",
     "weeksAgo": "{n} 周前",
     "pin": "置顶",
-    "unpin": "取消置顶"
+    "unpin": "取消置顶",
+    "browserN": "浏览器 {n}"
   },
   "folder": {
     "title": "文件夹",
@@ -99,6 +101,17 @@
     "results": "找到 {count} 个结果",
     "noMatch": "没有匹配的书签",
     "recentSearches": "最近搜索"
+  },
+  "sort": {
+    "label": "排序方式",
+    "default": "默认顺序",
+    "title": "标题",
+    "createdAt": "添加时间",
+    "visitCount": "访问次数",
+    "lastVisited": "最近访问",
+    "asc": "升序",
+    "desc": "降序",
+    "toggleDirection": "切换排序方向"
   },
   "settings": {
     "title": "设置",
@@ -168,7 +181,10 @@
     "folderDistribution": "文件夹分布",
     "recentlyVisited": "最近访问",
     "mostVisited": "访问最多",
-    "visits": "次访问"
+    "visits": "次访问",
+    "totalVisits": "总访问次数",
+    "byTag": "标签分布",
+    "recentlyAdded": "最近添加"
   },
   "dialog": {
     "addBookmark": "添加书签",

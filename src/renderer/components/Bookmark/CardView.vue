@@ -1,5 +1,13 @@
 <template>
   <div class="card-view">
+    <!--
+      排序工具条：与网格同级、位于网格上方，左右直接跟随内容区内边距。
+      排序状态在 sort store 里（与 ListView 共用），所以切视图不丢排序。
+    -->
+    <div class="card-toolbar">
+      <SortControl />
+    </div>
+
     <div
       v-if="filteredBookmarks.length === 0"
       class="empty-state"
@@ -48,11 +56,13 @@ import {
   useBookmarkStore,
   useFolderStore,
   useSelectionStore,
+  useSortStore,
   useTagStore
 } from '../../stores'
 import BookmarkCard from './BookmarkCard.vue'
 import BulkActionBar from './BulkActionBar.vue'
 import EditDialog from '../Modal/EditDialog.vue'
+import SortControl from './SortControl.vue'
 import type { Bookmark } from '../../types'
 
 interface Props {
@@ -69,6 +79,7 @@ const bookmarkStore = useBookmarkStore()
 const folderStore = useFolderStore()
 const tagStore = useTagStore()
 const selectionStore = useSelectionStore()
+const sortStore = useSortStore()
 const { bookmarks } = storeToRefs(bookmarkStore)
 const { currentFolderSubtreeIds } = storeToRefs(folderStore)
 const { selectedTagIds } = storeToRefs(tagStore)
@@ -76,18 +87,7 @@ const { selectedTagIds } = storeToRefs(tagStore)
 const { isSelecting } = storeToRefs(selectionStore)
 
 const editDialogVisible = ref(false)
-const editingBookmark = ref<any>(null)
-
-/**
- * 置顶优先分组：先拼接置顶项、再拼接其余项，**组内保持入参顺序**
- * （`filter` 天然稳定，不引入额外比较器去扰动既有顺序）。
- * ListView 里有一份语义完全一致的实现（那边必须在既有列排序「之后」调用），
- * 两处改动请保持同步。
- */
-const pinnedFirst = (list: Bookmark[]) => [
-  ...list.filter(b => b.pinned === true),
-  ...list.filter(b => b.pinned !== true)
-]
+const editingBookmark = ref<Bookmark | null>(null)
 
 const filteredBookmarks = computed(() => {
   let filtered = bookmarks.value
@@ -113,10 +113,12 @@ const filteredBookmarks = computed(() => {
     )
   }
 
-  return pinnedFirst(filtered)
+  // 排序 + 置顶优先都由 sort store 统一处理（纯函数，返回新数组，不改动入参）：
+  // 子树过滤 → 标签过滤 → 搜索过滤 的顺序保持不变，排序是最后一步。
+  return sortStore.applySort(filtered)
 })
 
-const handleEdit = (bookmark: any) => {
+const handleEdit = (bookmark: Bookmark) => {
   editingBookmark.value = bookmark
   editDialogVisible.value = true
 }
@@ -129,6 +131,19 @@ const handleEdit = (bookmark: any) => {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+/*
+ * 排序工具条：左对齐（网格左边缘与内容区左内边距天然一致；
+ * 若右对齐会与 .card-grid 的 scrollbar-gutter 留白差 15px）。
+ * 高度由 SortControl 自身（--lc-control-md）决定，这里只排布与留白。
+ */
+.card-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: var(--lc-space-3);
 }
 
 .card-grid {

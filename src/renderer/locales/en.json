@@ -17,7 +17,8 @@
     "success": "Success",
     "error": "Error",
     "warning": "Warning",
-    "info": "Info"
+    "info": "Info",
+    "actions": "Actions"
   },
   "sidebar": {
     "allBookmarks": "All Bookmarks",
@@ -55,7 +56,8 @@
     "unknown": "Unknown",
     "weeksAgo": "{n} w ago",
     "pin": "Pin to top",
-    "unpin": "Unpin"
+    "unpin": "Unpin",
+    "browserN": "Browser {n}"
   },
   "folder": {
     "title": "Folders",
@@ -99,6 +101,17 @@
     "results": "{count} results found",
     "noMatch": "No bookmarks match your search",
     "recentSearches": "Recent searches"
+  },
+  "sort": {
+    "label": "Sort by",
+    "default": "Default order",
+    "title": "Title",
+    "createdAt": "Date added",
+    "visitCount": "Visit count",
+    "lastVisited": "Last visited",
+    "asc": "Ascending",
+    "desc": "Descending",
+    "toggleDirection": "Toggle sort direction"
   },
   "settings": {
     "title": "Settings",
@@ -168,7 +181,10 @@
     "folderDistribution": "Folder Distribution",
     "recentlyVisited": "Recently Visited",
     "mostVisited": "Most Visited",
-    "visits": "visits"
+    "visits": "visits",
+    "totalVisits": "Total Visits",
+    "byTag": "Bookmarks by Tag",
+    "recentlyAdded": "Recently Added"
   },
   "dialog": {
     "addBookmark": "Add Bookmark",

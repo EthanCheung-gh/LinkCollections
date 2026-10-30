@@ -1,5 +1,14 @@
 <template>
   <div class="list-view">
+    <!--
+      排序工具条：与表格同级、位于表格上方（不挤压表格高度预算）。
+      控件直接读写 sort store，与 CardView 共用同一份排序状态；
+      表格表头的排序箭头由 syncTableSort() 反向投影回来，两者双向同步。
+    -->
+    <div class="list-toolbar">
+      <SortControl />
+    </div>
+
     <div
       v-if="filteredBookmarks.length === 0"
       class="empty-state"
@@ -59,7 +68,11 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="title" label="Title" min-width="200">
+        <el-table-column
+        prop="title"
+        :label="t('form.title')"
+        min-width="200"
+      >
           <template #default="{ row }">
             <div class="title-cell">
               <div class="title-line">
@@ -85,7 +98,7 @@
 
         <el-table-column
           prop="description"
-          label="Description"
+          :label="t('form.description')"
           min-width="250"
           class-name="responsive-col"
         >
@@ -96,7 +109,12 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="tags" label="Tags" width="200" class-name="responsive-col">
+        <el-table-column
+        prop="tags"
+        :label="t('form.tags')"
+        width="200"
+        class-name="responsive-col"
+      >
           <template #default="{ row }">
             <div class="tags-cell">
               <el-tag
@@ -113,7 +131,12 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="visitCount" label="Visits" width="80" sortable="custom">
+        <el-table-column
+        prop="visitCount"
+        :label="t('bookmark.visitCount')"
+        width="80"
+        sortable="custom"
+      >
           <template #default="{ row }">
             <div class="visits-cell">
               <i class="i-heroicons-chart-bar" />
@@ -136,7 +159,7 @@
 
         <el-table-column
           v-if="!isSelecting"
-          label="Actions"
+          :label="t('common.actions')"
           width="100"
           fixed="right"
         >
@@ -156,18 +179,18 @@
                   <el-dropdown-menu>
                     <el-dropdown-item command="edit">
                       <i class="i-heroicons-pencil mr-2" />
-                      Edit
+                      {{ t('common.edit') }}
                     </el-dropdown-item>
                     <el-dropdown-item command="share">
                       <i class="i-heroicons-share mr-2" />
-                      Share
+                      {{ t('bookmark.share') }}
                     </el-dropdown-item>
                     <el-dropdown-item
                       divided
                       command="open-default"
                     >
                       <i class="i-heroicons-arrow-top-right-on-square mr-2" />
-                      Open in Default Browser
+                      {{ t('bookmark.openInDefaultBrowser') }}
                     </el-dropdown-item>
                     <el-dropdown-item
                       v-for="(browser, index) in browsers"
@@ -175,14 +198,14 @@
                       :command="`open-browser-${index}`"
                     >
                       <i class="i-heroicons-globe-alt mr-2" />
-                      {{ browser.name || `Browser ${index + 1}` }}
+                      {{ browser.name || t('bookmark.browserN', { n: index + 1 }) }}
                     </el-dropdown-item>
                     <el-dropdown-item
                       divided
                       command="delete"
                     >
                       <i class="i-heroicons-trash mr-2" />
-                      Delete
+                      {{ t('common.delete') }}
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -210,6 +233,7 @@ import {
   useBookmarkStore,
   useFolderStore,
   useSelectionStore,
+  useSortStore,
   useTagStore,
   useUIStore
 } from '../../stores'
@@ -217,8 +241,10 @@ import { highlightText } from '../../utils/highlight'
 import { getFaviconUrl } from '../../utils/favicon'
 import { isValidColor } from '../../utils/validation'
 import BulkActionBar from './BulkActionBar.vue'
+import SortControl from './SortControl.vue'
 import EditDialog from '../Modal/EditDialog.vue'
 import type { Bookmark } from '../../types'
+import type { SortKey } from '../../stores'
 import { useI18n } from 'vue-i18n'
 
 interface Props {
@@ -236,6 +262,7 @@ const folderStore = useFolderStore()
 const tagStore = useTagStore()
 const uiStore = useUIStore()
 const selectionStore = useSelectionStore()
+const sortStore = useSortStore()
 const { bookmarks } = storeToRefs(bookmarkStore)
 const { currentFolderSubtreeIds } = storeToRefs(folderStore)
 const { tags, selectedTagIds } = storeToRefs(tagStore)
@@ -252,8 +279,6 @@ const tableRef = ref<TableInstance>()
 
 const editDialogVisible = ref(false)
 const editingBookmark = ref<Bookmark | null>(null)
-const sortProp = ref<string>('')
-const sortOrder = ref<'ascending' | 'descending' | null>(null)
 
 const browsers = computed(() => {
   if (!settings.value?.availableBrowsers) return []
@@ -261,13 +286,10 @@ const browsers = computed(() => {
 })
 
 /**
- * 置顶优先分组：先拼接置顶项、再拼接其余项，组内保持入参顺序。
- * CardView 里有一份语义完全一致的实现，两处改动请保持同步。
+ * 只有这两列在表头可排序（`sortable="custom"`）。title / createdAt 没有可排序列，
+ * 只能通过上方工具条排序 —— 表头排序箭头在这两种键下保持清空。
  */
-const pinnedFirst = (list: Bookmark[]) => [
-  ...list.filter(b => b.pinned === true),
-  ...list.filter(b => b.pinned !== true)
-]
+const SORTABLE_COLUMNS: readonly SortKey[] = ['visitCount', 'lastVisited']
 
 const filteredBookmarks = computed(() => {
   let filtered = bookmarks.value
@@ -293,36 +315,62 @@ const filteredBookmarks = computed(() => {
     )
   }
 
-  if (sortProp.value && sortOrder.value) {
-    filtered = [...filtered].sort((a, b) => {
-      let valA: any
-      let valB: any
+  // 排序 + 置顶优先统一由 sort store 处理（纯函数，返回新数组）：
+  // 子树过滤 → 标签过滤 → 搜索过滤 → 排序，顺序不变。
+  return sortStore.applySort(filtered)
+})
 
-      switch (sortProp.value) {
-        case 'visitCount':
-          valA = a.visitCount || 0
-          valB = b.visitCount || 0
-          break
-        case 'lastVisited':
-          valA = a.lastVisited ? new Date(a.lastVisited).getTime() : 0
-          valB = b.lastVisited ? new Date(b.lastVisited).getTime() : 0
-          break
-        default:
-          return 0
-      }
+/* =============================================================================
+ * 表头排序 ⇄ sort store 双向同步
+ *
+ * - 表头 → store：`handleSortChange`（el-table `sort-change`）用显式方向写入 store；
+ *   `order === null`（第三次点击表头）→ reset()。
+ * - store → 表头：`syncTableSort()` 用命令式 `table.sort(prop, order)` / `clearSort()`
+ *   把当前状态投影成表头箭头。
+ *
+ * 为什么不用 `:default-sort`：它只在表格初始化（含本组件里 `:key` 重建）时生效一次，
+ * 工具条改排序时无法回头更新箭头；而 `table.sort()` 是唯一能随时改箭头的入口。
+ * 程序化调用会同步 emit `sort-change`（EP 在 `changeSortCondition` 里同步 emit），
+ * 用 `applyingSortToTable` 闸门屏蔽这一轮回流，避免「投影 → 回写 → 再投影」。
+ * ========================================================================== */
+let applyingSortToTable = false
 
-      if (sortOrder.value === 'ascending') {
-        return valA > valB ? 1 : -1
-      } else {
-        return valA < valB ? 1 : -1
-      }
-    })
+/** 把 store 里的排序状态投影到表头箭头（只有存在的可排序列才会出现箭头） */
+const syncTableSort = () => {
+  const table = tableRef.value
+  if (!table) return
+
+  const key = sortStore.sortKey
+  applyingSortToTable = true
+  try {
+    if (!SORTABLE_COLUMNS.includes(key)) {
+      // 'default' / 'title' / 'createdAt'：没有对应列（或不需要排序），清空箭头
+      table.clearSort()
+      return
+    }
+    table.sort(key, sortStore.sortDirection === 'asc' ? 'ascending' : 'descending')
+  } finally {
+    applyingSortToTable = false
+  }
+}
+
+/** 表头 → store。注意 `sort-change` 的 prop 在「取消排序」时为 null。 */
+const handleSortChange = ({ prop, order }: { prop?: string | null; order?: string | null }) => {
+  if (applyingSortToTable) return
+
+  if (!prop || !order) {
+    sortStore.reset()
+    return
   }
 
-  // 置顶优先级高于任何列排序：必须在既有排序**之后**再套一层分组，
-  // 这样「组内仍然按用户选择的列 / 原顺序」排列（与 CardView 语义一致）。
-  return pinnedFirst(filtered)
-})
+  // 未知列（理论上不会出现）当作清除排序，避免 store 里留下不可见的状态
+  if (!SORTABLE_COLUMNS.includes(prop as SortKey)) {
+    sortStore.reset()
+    return
+  }
+
+  sortStore.setSort(prop as SortKey, order === 'ascending' ? 'asc' : 'desc')
+}
 
 /* =============================================================================
  * 与 selection store 的双向同步（el-table type="selection" 只是「投影」）
@@ -393,17 +441,33 @@ watch(
   { flush: 'post' }
 )
 
-// 过滤/排序改变了可见行集合后，重新把选中态投影上去（否则勾选会「消失」）
+// 过滤/排序改变了可见行集合后，重新把选中态投影上去（否则勾选会「消失」），
+// 同时把排序箭头对齐一次（数据从空 → 非空时表格才存在，只能在这里补投影）
 watch(
   filteredBookmarks,
   () => {
-    void nextTick(applySelectionToTable)
+    void nextTick(() => {
+      applySelectionToTable()
+      syncTableSort()
+    })
+  },
+  { flush: 'post' }
+)
+
+// 排序状态变化（工具条 / 跨视图带入）与表格按 :key 重建后，都要重新投影表头箭头
+watch(
+  [() => sortStore.sortKey, () => sortStore.sortDirection, tableKey],
+  () => {
+    void nextTick(syncTableSort)
   },
   { flush: 'post' }
 )
 
 onMounted(() => {
-  void nextTick(applySelectionToTable)
+  void nextTick(() => {
+    applySelectionToTable()
+    syncTableSort()
+  })
 })
 
 const handleEdit = (bookmark: Bookmark) => {
@@ -485,11 +549,6 @@ const handleAction = async (command: string, bookmark: Bookmark) => {
   }
 }
 
-const handleSortChange = (prop: any) => {
-  sortProp.value = prop.prop
-  sortOrder.value = prop.order
-}
-
 const handleFaviconError = (bookmark: Bookmark) => {
   bookmarkStore.updateBookmark(bookmark.id, { favicon: '' }, false)
 }
@@ -548,6 +607,18 @@ const tagBackgroundColor = (color?: string | null): string => {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+/*
+ * 排序工具条：左对齐（与 CardView 完全一致的排版；表格左边缘与内容区左内边距天然对齐，
+ * 右对齐会被 .table-scroll 的滚动条占位挤偏）。不设 flex:1，避免挤压表格高度。
+ */
+.list-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: var(--lc-space-3);
 }
 
 /*
