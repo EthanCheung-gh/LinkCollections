@@ -157,7 +157,10 @@
     "checkingLinks": "Checking...",
     "mergeDuplicates": "Merge Duplicate Bookmarks",
     "mergeDuplicatesDesc": "Find bookmarks that point to the same URL and combine them into one",
-    "mergeDuplicatesAction": "Preview & Merge"
+    "mergeDuplicatesAction": "Preview & Merge",
+    "trash": "Trash",
+    "trashDesc": "Deleted bookmarks are kept for 30 days, then removed permanently",
+    "trashAction": "Open Trash"
   },
   "importExport": {
     "title": "Import / Export",
@@ -196,6 +199,17 @@
     "none": "No duplicate bookmarks found",
     "merge": "Merge",
     "confirm": "Merge {count} duplicate bookmarks? The extra copies will be deleted and this cannot be undone."
+  },
+  "trash": {
+    "title": "Trash",
+    "summary": "{count} bookmark(s) in the trash",
+    "deletedAt": "Deleted {time}",
+    "restore": "Restore",
+    "purge": "Delete Permanently",
+    "purgeConfirm": "Permanently delete \"{name}\"? This cannot be undone.",
+    "emptyTrash": "Empty Trash",
+    "emptyConfirm": "Permanently delete every bookmark in the trash? This cannot be undone.",
+    "none": "The trash is empty"
   },
   "stats": {
     "title": "Statistics",
@@ -296,6 +310,9 @@
     "historyLoadFailed": "Failed to load visit history",
     "linkCheckFailed": "Failed to check links",
     "duplicatesMerged": "{count} duplicate bookmarks merged",
-    "mergeDuplicatesFailed": "Failed to merge duplicate bookmarks"
+    "mergeDuplicatesFailed": "Failed to merge duplicate bookmarks",
+    "bookmarksRestored": "{count} bookmark(s) restored",
+    "bookmarksPurged": "{count} bookmark(s) deleted permanently",
+    "trashLoadFailed": "Failed to load the trash"
   }
 }

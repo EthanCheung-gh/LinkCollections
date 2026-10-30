@@ -35,6 +35,16 @@ export interface Bookmark {
    * 因此本功能**不需要 schema 迁移**。
    */
   linkStatus?: LinkStatus
+  /**
+   * 软删除标记（回收站）。
+   *
+   * - `null` / 缺失 = 未删除（正常书签）；
+   * - 非空 ISO 字符串 = 删除时刻，记录在回收站里，超过保留期（30 天）会被永久清理。
+   *
+   * 主进程的 `get-bookmarks` 只返回未删除的记录，因此 `bookmarks` store 里的对象
+   * 恒为「未删除」；回收站列表走 `get-deleted-bookmarks`（store 的 `trashedBookmarks`）。
+   */
+  deletedAt?: string | null
   createdAt: string
   updatedAt: string
 }

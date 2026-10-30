@@ -3,9 +3,21 @@ import { v4 as uuidv4 } from 'uuid'
 import { readJsonFile, writeJsonFile } from '../utils/storage'
 // 访问历史与书签写在两个文件里：这里**直接调用函数**而不是走 IPC，
 // 避免主进程自己 invoke 自己的通道（多一层序列化，且错误语义会被 wrap 成字符串）。
-import { appendVisit, clearHistory, removeBookmarkHistory, removeBookmarksHistory } from './history'
+import { appendVisit, clearHistory, removeBookmarksHistory } from './history'
 // 重复书签合并的「计划」是纯函数，主进程与渲染层共用同一份（含 URL 归一化规则）
 import { planDuplicateMerges } from '../../shared/duplicates'
+
+/**
+ * 回收站保留期（天）。
+ *
+ * 软删除超过这个天数的记录会在应用启动时（迁移之后、建窗之前）被**永久**清理，
+ * 见 {@link purgeExpiredTrash}。30 天是产品约定：既给用户足够的反悔窗口，
+ * 又避免回收站无限膨胀（每次写盘都要重写整个 bookmarks.json）。
+ */
+export const TRASH_RETENTION_DAYS = 30
+
+/** 一天的毫秒数（保留期计算用，避免魔法数字散落在函数体里） */
+const DAY_MS = 86_400_000
 
 interface Bookmark {
   id: string
@@ -20,6 +32,17 @@ interface Bookmark {
   lastVisited: string | null
   /** 置顶标记：落盘对象里恒为布尔（旧数据由 utils/schema.ts 的迁移补齐） */
   pinned: boolean
+  /**
+   * 软删除标记（回收站）。
+   *
+   * - `null` / 缺失 = **未删除**（正常书签）；
+   * - 非空 ISO 字符串 = 删除时刻，记录进入回收站，超过
+   *   {@link TRASH_RETENTION_DAYS} 天后由启动清理永久删除；
+   *
+   * 落盘对象里恒存在该键（旧数据由 utils/schema.ts 的 v3 迁移补 `null`），
+   * 但读取侧仍按「缺失 = 未删除」兜底，避免第三方/手工编辑的数据出现意外。
+   */
+  deletedAt?: string | null
   /**
    * 死链检查结果（可选，缺失 = 从未检查过）。
    *
@@ -49,6 +72,68 @@ function getBookmarks(): Bookmark[] {
 function saveBookmarks(bookmarks: Bookmark[]): boolean {
   return writeJsonFile(BOOKMARKS_FILE, bookmarks)
 }
+
+/* ------------------------------------------------------------------ *
+ * 软删除（回收站）判定：全部读路径共用的唯一口径
+ * ------------------------------------------------------------------ */
+
+/**
+ * 记录是否在回收站里。
+ *
+ * 只有**非空字符串**才算已删除：`null` / 缺失 / `''` / 其它脏值都视为未删除
+ * （「缺失 = 未删除」是数据模型的一部分，不能让一条脏数据把书签藏起来）。
+ */
+export function isDeleted(bookmark: { deletedAt?: string | null } | null | undefined): boolean {
+  if (!bookmark || typeof bookmark !== 'object') return false
+  const { deletedAt } = bookmark
+  return typeof deletedAt === 'string' && deletedAt !== ''
+}
+
+/** 未删除的记录（保序，元素仍是原引用）；纯函数，不改入参。 */
+export function activeBookmarks<T extends { deletedAt?: string | null }>(
+  list: readonly T[]
+): T[] {
+  const items = Array.isArray(list) ? list : []
+  return items.filter(bookmark => !isDeleted(bookmark))
+}
+
+/**
+ * 已删除的记录，按 `deletedAt` **倒序**（最近删除的排最前）。
+ *
+ * 时间不可解析的脏值排在最后（不能因为一条脏数据把整个回收站排序打乱）；
+ * 排序稳定，同一毫秒的多条记录保持落盘顺序。纯函数，不改入参。
+ */
+export function deletedBookmarks<T extends { deletedAt?: string | null }>(
+  list: readonly T[]
+): T[] {
+  const trashed = (Array.isArray(list) ? list : []).filter(bookmark => isDeleted(bookmark))
+
+  const timeOf = (bookmark: { deletedAt?: string | null }): number => {
+    const time = Date.parse(String(bookmark.deletedAt))
+    return Number.isFinite(time) ? time : Number.NEGATIVE_INFINITY
+  }
+
+  return trashed
+    .map((bookmark, index) => ({ bookmark, index, time: timeOf(bookmark) }))
+    .sort((a, b) => b.time - a.time || a.index - b.index)
+    .map(entry => entry.bookmark)
+}
+
+/**
+ * 永久删除这些 id 对应的访问历史。
+ *
+ * 历史清理失败只记日志：书签已经（软/硬）删除并落盘，不能反过来报「删除失败」。
+ * 这里刻意**不**在软删除路径上调用 —— 软删除是可恢复的，历史必须留着
+ * （趋势图仍统计回收站里的书签，见 `purgeExpiredTrash` / `purge-bookmarks`）。
+ */
+function dropHistoryQuietly(ids: readonly string[], reason: string): void {
+  try {
+    removeBookmarksHistory(ids)
+  } catch (error) {
+    console.error(`[history] Failed to remove visit history after ${reason}:`, error)
+  }
+}
+
 
 /**
  * 只接受字符串，其余（`undefined` / `null` / 数字…）折叠为空串。
@@ -93,13 +178,33 @@ export interface BulkUpdateResult {
   missing: string[]
 }
 
-/** `bulk-delete-bookmarks` 的返回：实际删除条数 + 未找到的 id。 */
+/** `bulk-delete-bookmarks` 的返回：实际**软删除**条数 + 未找到（或已在回收站）的 id。 */
 export interface BulkDeleteResult {
   deleted: number
   missing: string[]
 }
 
-/** `merge-duplicates` 的返回：合并的组数 + 删除条数 + 合并后的完整列表。 */
+/** `restore-bookmarks` 的返回：实际恢复条数 + 未找到的 id + 恢复后的**未删除**列表。 */
+export interface RestoreBookmarksResult {
+  restored: number
+  missing: string[]
+  bookmarks: Bookmark[]
+}
+
+/** `purge-bookmarks` 的返回：永久删除条数 + 剩余未删除列表 + 剩余回收站列表。 */
+export interface PurgeBookmarksResult {
+  purged: number
+  bookmarks: Bookmark[]
+  trashed: Bookmark[]
+}
+
+/** `empty-trash` 的返回：永久删除条数 + 剩余未删除列表（回收站必然已清空）。 */
+export interface EmptyTrashResult {
+  purged: number
+  bookmarks: Bookmark[]
+}
+
+/** `merge-duplicates` 的返回：合并的组数 + 软删除条数 + 合并后的未删除列表。 */
 export interface MergeDuplicatesResult {
   groups: number
   removed: number
@@ -142,7 +247,9 @@ export interface FilterBookmarksResult<T> {
 }
 
 /**
- * 「按 id 集合过滤」的**唯一**实现 —— `bulk-delete-bookmarks` 与 `merge-duplicates` 共用。
+ * 「按 id 集合过滤」的**唯一**实现 —— `purge-bookmarks` 用它做永久删除
+ * （软删除路径不能移除记录，因此 `bulk-delete-bookmarks` / `merge-duplicates`
+ * 改成写 `deletedAt` 后不再调用它）。
  *
  * 纯函数：不读写盘、不改入参（`remaining` 是新数组，元素仍是原引用）。
  * `missing` 只收集「请求了但数据里不存在」的 id（按 `ids` 的首次出现顺序），不视为错误。
@@ -230,8 +337,19 @@ function applyBulkPatch(current: Bookmark, patch: NormalizedBulkPatch, now: stri
 }
 
 export function registerBookmarkHandlers(): void {
+  /**
+   * 主列表：**只返回未删除**的记录（回收站里的记录由 `get-deleted-bookmarks` 提供）。
+   *
+   * 过滤放在主进程而不是渲染层：`bookmarks` store / 统计 / 搜索 / 侧边栏计数
+   * 全都基于这一个返回值，多一处漏过滤就会让「已删除」的书签漏到界面上。
+   */
   ipcMain.handle('get-bookmarks', () => {
-    return getBookmarks()
+    return activeBookmarks(getBookmarks())
+  })
+
+  /** 回收站列表：只返回已删除的记录，按 `deletedAt` 倒序（最近删除的排最前）。 */
+  ipcMain.handle('get-deleted-bookmarks', () => {
+    return deletedBookmarks(getBookmarks())
   })
 
   ipcMain.handle('add-bookmark', (_, bookmarkData: Partial<Bookmark>) => {
@@ -253,6 +371,8 @@ export function registerBookmarkHandlers(): void {
       lastVisited: null,
       // 只认真布尔：`'true'` / 1 / undefined 一律落成 false
       pinned: input.pinned === true,
+      // 新建的书签永远不在回收站里：`deletedAt` 不接受渲染层传入（不能被「顺手复活」）
+      deletedAt: null,
       createdAt: now,
       updatedAt: now
     }
@@ -267,7 +387,9 @@ export function registerBookmarkHandlers(): void {
 
   ipcMain.handle('update-bookmark', (_, id: string, updates: Partial<Bookmark>) => {
     const bookmarks = getBookmarks()
-    const index = bookmarks.findIndex(b => b.id === id)
+    // 已删除的记录对写路径不可见：修改一条回收站里的书签视为「未找到」，
+    // 而不是「顺手把它复活」（恢复必须显式走 `restore-bookmarks`）。
+    const index = bookmarks.findIndex(b => b.id === id && !isDeleted(b))
 
     if (index === -1) {
       throw new Error('Bookmark not found')
@@ -322,22 +444,27 @@ export function registerBookmarkHandlers(): void {
     throw new Error('Failed to update bookmark')
   })
 
+  /**
+   * 单条删除 = **软删除**（进回收站）。
+   *
+   * - 只写 `deletedAt`（+ `updatedAt`），记录仍留在 `bookmarks.json` 里，可被
+   *   `restore-bookmarks` 恢复；
+   * - **不再清理访问历史**：软删除是可恢复的，历史必须跟着记录一起留在原地，
+   *   否则「恢复后访问次数/趋势图归零」；
+   * - 已经删除过的 id 视为「未找到」（重复删除不是有效操作，也不该刷新 `deletedAt`）。
+   */
   ipcMain.handle('delete-bookmark', (_, id: string) => {
     const bookmarks = getBookmarks()
-    const filtered = bookmarks.filter(b => b.id !== id)
+    const index = bookmarks.findIndex(b => b.id === id && !isDeleted(b))
 
-    if (filtered.length === bookmarks.length) {
+    if (index === -1) {
       throw new Error('Bookmark not found')
     }
 
-    if (saveBookmarks(filtered)) {
-      // 书签已删除：同步删掉它的全部访问历史，避免悬空 id 继续被趋势图统计。
-      // 历史清理失败只记日志 —— 书签已经删掉了，不能反过来报「删除失败」。
-      try {
-        removeBookmarkHistory(id)
-      } catch (error) {
-        console.error(`[history] Failed to remove visit history for bookmark ${id}:`, error)
-      }
+    const now = new Date().toISOString()
+    bookmarks[index] = { ...bookmarks[index], deletedAt: now, updatedAt: now }
+
+    if (saveBookmarks(bookmarks)) {
       return
     }
     throw new Error('Failed to delete bookmark')
@@ -345,7 +472,8 @@ export function registerBookmarkHandlers(): void {
 
   ipcMain.handle('increment-visit-count', (_, id: string) => {
     const bookmarks = getBookmarks()
-    const index = bookmarks.findIndex(b => b.id === id)
+    // 同 update-bookmark：回收站里的记录不能被「顺手复活」
+    const index = bookmarks.findIndex(b => b.id === id && !isDeleted(b))
 
     if (index === -1) {
       throw new Error('Bookmark not found')
@@ -418,6 +546,8 @@ export function registerBookmarkHandlers(): void {
       // 同一 id 在脏数据里可能出现多次：只改第一条，其余原样保留
       const indexById = new Map<string, number>()
       bookmarks.forEach((bookmark, index) => {
+        // 回收站里的记录不参与批量更新：命中它等于「复活」，而复活只能走 restore-bookmarks
+        if (isDeleted(bookmark)) return
         if (!indexById.has(bookmark.id)) indexById.set(bookmark.id, index)
       })
 
@@ -451,11 +581,14 @@ export function registerBookmarkHandlers(): void {
   )
 
   /**
-   * 批量删除：**一次读 + 一次写**。
-   * `deleted` 是实际删除条数（不含不存在的 id），`missing` 收集未找到的 id。
+   * 批量删除 = **批量软删除**：**一次读 + 一次写**。
    *
-   * 「按 id 集合过滤」的逻辑已抽成纯函数 {@link filterBookmarksByIds}（与
-   * `merge-duplicates` 共用），本通道只负责读盘、写盘与历史清理的编排。
+   * - `deleted` 是实际**软删除**的条数（不含不存在、或已经在回收站里的 id），
+   *   `missing` 收集这些没有生效的 id；
+   * - 只写 `deletedAt` / `updatedAt`，记录仍留在文件里，可被 `restore-bookmarks` 恢复；
+   * - **不清历史**（软删除可恢复，历史必须留着）；永久清理在 `purge-bookmarks` /
+   *   `empty-trash` / 启动时的 `purgeExpiredTrash` 里做；
+   * - 一条都没命中时不写盘（避免「只选中了已失效的 id」也重写整个文件）。
    */
   ipcMain.handle('bulk-delete-bookmarks', (_, ids: string[]): BulkDeleteResult => {
     const uniqueIds = dedupeIds(ids)
@@ -465,23 +598,32 @@ export function registerBookmarkHandlers(): void {
 
     // ---- 唯一一次读盘 ----
     const bookmarks = getBookmarks()
-    const { remaining, deleted, missing } = filterBookmarksByIds(bookmarks, uniqueIds)
+
+    // 只对「存在且未删除」的记录生效；同一 id 在脏数据里出现多次时全部一起软删除
+    const requested = new Set(uniqueIds)
+    const existingActiveIds = new Set<string>()
+    const now = new Date().toISOString()
+    let deleted = 0
+
+    for (let index = 0; index < bookmarks.length; index += 1) {
+      const bookmark = bookmarks[index]
+      if (!requested.has(bookmark.id)) continue
+      if (isDeleted(bookmark)) continue
+
+      bookmarks[index] = { ...bookmark, deletedAt: now, updatedAt: now }
+      deleted += 1
+      existingActiveIds.add(bookmark.id)
+    }
+
+    const missing = uniqueIds.filter(id => !existingActiveIds.has(id))
 
     if (deleted === 0) {
       return { deleted: 0, missing }
     }
 
     // ---- 唯一一次写盘 ----
-    if (!saveBookmarks(remaining)) {
+    if (!saveBookmarks(bookmarks)) {
       throw new Error('Failed to bulk delete bookmarks')
-    }
-
-    // 清理这些书签的访问历史（一次读写），否则趋势图会继续统计已删除的书签。
-    // 历史清理失败不应让批量删除整体失败。
-    try {
-      removeBookmarksHistory(uniqueIds)
-    } catch (error) {
-      console.error('[bookmarks] Failed to clean visit history after bulk delete:', error)
     }
 
     return { deleted, missing }
@@ -493,13 +635,18 @@ export function registerBookmarkHandlers(): void {
    * 计划由 `shared/duplicates.ts` 的纯函数算出（与渲染层预览用的是同一份逻辑），
    * 本通道只做三件事：
    *  1. 唯一一次读盘；
-   *  2. 把每个 keeper 的合并字段写回它的位置，并丢弃 donors —— 删除 donors 复用
-   *     {@link filterBookmarksByIds}（filter 保序，因此 **keeper 位置与其余记录顺序都不变**）；
+   *  2. 把每个 keeper 的合并字段写回它的位置，并把 donors **软删除**
+   *     （写 `deletedAt`，进回收站；记录本身仍留在文件里，因此 keeper 位置与
+   *     其余记录顺序都不变）；
    *  3. 唯一一次写盘。
    *
+   * 已删除（回收站里）的记录**不参与分组、也不会被合并**：计划层直接跳过它们
+   * （见 `shared/duplicates.ts` 的 `groupDuplicates`），因此它们原样留在文件里。
+   *
    * 无重复时不写盘（返回原列表），避免一次无意义的整文件重写。
-   * 写盘失败统一抛 `Failed to merge duplicate bookmarks`；donors 的访问历史清理
-   * 失败只记日志 —— 合并已经落盘，不能反过来报「合并失败」。
+   * 写盘失败统一抛 `Failed to merge duplicate bookmarks`。
+   * donors 的访问历史**不清理**：它们只是进了回收站，`restore-bookmarks` 之后
+   * 历史必须还在（趋势图仍统计回收站里的书签）。
    */
   ipcMain.handle('merge-duplicates', (): MergeDuplicatesResult => {
     // ---- 唯一一次读盘 ----
@@ -507,16 +654,19 @@ export function registerBookmarkHandlers(): void {
     const plan = planDuplicateMerges(bookmarks, new Date())
 
     if (plan.duplicateGroups === 0) {
-      return { groups: 0, removed: 0, bookmarks }
+      return { groups: 0, removed: 0, bookmarks: activeBookmarks(bookmarks) }
     }
 
     const fieldsById = new Map(plan.keepers.map(keeper => [keeper.id, keeper.fields]))
+    const donorIds = new Set(plan.donorIds)
+    const now = new Date().toISOString()
 
-    // 复用 {@link filterBookmarksByIds}（与 `bulk-delete-bookmarks` 同一实现）丢掉 donors：
-    // filter 保序，因此其余记录（含每个 keeper 的原下标）顺序不变；
-    // 再把合并后的字段写回 keeper 自己。
-    const { remaining } = filterBookmarksByIds(bookmarks, plan.donorIds)
-    const merged: Bookmark[] = remaining.map(bookmark => {
+    // 保序改写：donors 打上 deletedAt（软删除），keepers 写回合并后的字段，
+    // 其余记录（含回收站里的）原样保留 —— 数组长度不变，因此下标天然稳定。
+    const merged: Bookmark[] = bookmarks.map(bookmark => {
+      if (donorIds.has(bookmark.id)) {
+        return { ...bookmark, deletedAt: now, updatedAt: now }
+      }
       const fields = fieldsById.get(bookmark.id)
       return fields ? { ...bookmark, ...fields } : bookmark
     })
@@ -531,14 +681,166 @@ export function registerBookmarkHandlers(): void {
       throw new Error('Failed to merge duplicate bookmarks')
     }
 
-    // donors 已被合并掉：清掉它们的逐次访问历史，避免趋势图继续统计不存在的书签。
-    // 历史清理失败只记日志，不影响合并结果（书签已经合并并落盘）。
-    try {
-      removeBookmarksHistory(plan.donorIds)
-    } catch (error) {
-      console.error('[bookmarks] Failed to clean visit history after merging duplicates:', error)
+    return {
+      groups: plan.duplicateGroups,
+      removed: plan.donorIds.length,
+      bookmarks: activeBookmarks(merged)
+    }
+  })
+
+  /**
+   * 从回收站恢复：**一次读 + 一次写**。
+   *
+   * - 只把 `deletedAt` 置 `null`（并刷新 `updatedAt`），其余字段（`visitCount` /
+   *   `tags` / `linkStatus` …）原样保留 —— 软删除从不改写它们；
+   * - 不存在、或本来就没删除的 id 计入 `missing`（不视为错误）；
+   * - 空 ids / 一条都没恢复时不写盘；
+   * - 返回的 `bookmarks` 是恢复后的**未删除**列表，渲染层整体替换本地数组即可。
+   */
+  ipcMain.handle('restore-bookmarks', (_, ids: string[]): RestoreBookmarksResult => {
+    const uniqueIds = dedupeIds(ids)
+    if (uniqueIds.length === 0) {
+      return { restored: 0, missing: [], bookmarks: activeBookmarks(getBookmarks()) }
     }
 
-    return { groups: plan.duplicateGroups, removed: plan.donorIds.length, bookmarks: merged }
+    // ---- 唯一一次读盘 ----
+    const bookmarks = getBookmarks()
+    const requested = new Set(uniqueIds)
+    const restoredIds = new Set<string>()
+    const now = new Date().toISOString()
+
+    for (let index = 0; index < bookmarks.length; index += 1) {
+      const bookmark = bookmarks[index]
+      if (!requested.has(bookmark.id)) continue
+      if (!isDeleted(bookmark)) continue
+
+      bookmarks[index] = { ...bookmark, deletedAt: null, updatedAt: now }
+      restoredIds.add(bookmark.id)
+    }
+
+    const missing = uniqueIds.filter(id => !restoredIds.has(id))
+
+    if (restoredIds.size === 0) {
+      return { restored: 0, missing, bookmarks: activeBookmarks(bookmarks) }
+    }
+
+    // ---- 唯一一次写盘 ----
+    if (!saveBookmarks(bookmarks)) {
+      throw new Error('Failed to restore bookmarks')
+    }
+
+    return { restored: restoredIds.size, missing, bookmarks: activeBookmarks(bookmarks) }
+  })
+
+  /**
+   * 永久删除指定记录（回收站里的「彻底删除」）：**一次读 + 一次写**。
+   *
+   * - 命中即从文件里彻底移除（不管它是否在回收站里 —— 这是用户显式的永久删除意图），
+   *   返回剩余未删除列表 + 剩余回收站列表，渲染层两边都能整体替换；
+   * - 写盘成功后清理这些记录的全部访问历史（失败只记日志：书签已经删掉了，
+   *   不能反过来报「删除失败」）；
+   * - 空 ids / 一条都没命中时不写盘。
+   */
+  ipcMain.handle('purge-bookmarks', (_, ids: string[]): PurgeBookmarksResult => {
+    const uniqueIds = dedupeIds(ids)
+    if (uniqueIds.length === 0) {
+      const current = getBookmarks()
+      return { purged: 0, bookmarks: activeBookmarks(current), trashed: deletedBookmarks(current) }
+    }
+
+    // ---- 唯一一次读盘 ----
+    const bookmarks = getBookmarks()
+    const { remaining, deleted } = filterBookmarksByIds(bookmarks, uniqueIds)
+
+    if (deleted === 0) {
+      return {
+        purged: 0,
+        bookmarks: activeBookmarks(bookmarks),
+        trashed: deletedBookmarks(bookmarks)
+      }
+    }
+
+    // ---- 唯一一次写盘 ----
+    if (!saveBookmarks(remaining)) {
+      throw new Error('Failed to purge bookmarks')
+    }
+
+    // 记录已经彻底消失：清掉它们的访问历史，避免趋势图继续统计不存在的书签。
+    dropHistoryQuietly(uniqueIds, 'purging bookmarks')
+
+    return {
+      purged: deleted,
+      bookmarks: activeBookmarks(remaining),
+      trashed: deletedBookmarks(remaining)
+    }
+  })
+
+  /**
+   * 清空回收站：**一次读 + 一次写**。
+   *
+   * 永久删除全部已删除记录并清理它们的访问历史；没有回收站记录时不写盘。
+   */
+  ipcMain.handle('empty-trash', (): EmptyTrashResult => {
+    // ---- 唯一一次读盘 ----
+    const bookmarks = getBookmarks()
+    const trashed = deletedBookmarks(bookmarks)
+
+    if (trashed.length === 0) {
+      return { purged: 0, bookmarks: activeBookmarks(bookmarks) }
+    }
+
+    const remaining = activeBookmarks(bookmarks)
+
+    // ---- 唯一一次写盘 ----
+    if (!saveBookmarks(remaining)) {
+      throw new Error('Failed to empty trash')
+    }
+
+    dropHistoryQuietly(
+      trashed.map(bookmark => bookmark.id),
+      'emptying trash'
+    )
+
+    return { purged: trashed.length, bookmarks: remaining }
   })
 }
+
+/**
+ * 启动时的回收站清理：永久删除 `deletedAt` 超过 {@link TRASH_RETENTION_DAYS} 天的记录。
+ *
+ * 由 `electron/main.ts` 在**数据迁移之后、注册 IPC/建窗之前**调用：
+ * 迁移保证了 `deletedAt` 字段存在，建窗之前清理保证界面第一次读到的数据就是干净的。
+ *
+ * - 边界：正好 30 天**不算**过期（用 `<` 而不是 `<=`），与历史保留窗口的口径一致；
+ * - `deletedAt` 无法解析的脏值**保留**（无法判定年龄时宁可不删，用户还能手动清理）；
+ * - 一条都不过期时不写盘；
+ * - 写盘成功后清理这些记录的访问历史（失败只记日志）。
+ *
+ * 返回 `{ purged }` 供调用方打日志；失败会抛出，由调用方决定是否中断启动。
+ */
+export function purgeExpiredTrash(now: number = Date.now()): { purged: number } {
+  const bookmarks = getBookmarks()
+  const cutoff = now - TRASH_RETENTION_DAYS * DAY_MS
+  const expiredIds = new Set<string>()
+
+  for (const bookmark of bookmarks) {
+    if (!isDeleted(bookmark)) continue
+    const deletedAt = Date.parse(String(bookmark.deletedAt))
+    if (!Number.isFinite(deletedAt)) continue
+    if (deletedAt < cutoff) expiredIds.add(bookmark.id)
+  }
+
+  if (expiredIds.size === 0) {
+    return { purged: 0 }
+  }
+
+  const remaining = bookmarks.filter(bookmark => !expiredIds.has(bookmark.id))
+  if (!saveBookmarks(remaining)) {
+    throw new Error('Failed to purge expired trash')
+  }
+
+  dropHistoryQuietly([...expiredIds], 'purging expired trash')
+
+  return { purged: expiredIds.size }
+}
+

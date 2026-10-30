@@ -1,9 +1,10 @@
 /**
  * `window.electronAPI` 的类型契约。
  *
- * 必须与 `electron/preload.ts` 暴露的 27 个方法**逐一对应**：
+ * 必须与 `electron/preload.ts` 暴露的 31 个方法**逐一对应**：
  * openBrowser / getBookmarks / addBookmark / updateBookmark / deleteBookmark /
- * bulkUpdateBookmarks / bulkDeleteBookmarks / mergeDuplicates / checkLinks /
+ * bulkUpdateBookmarks / bulkDeleteBookmarks / getDeletedBookmarks /
+ * restoreBookmarks / purgeBookmarks / emptyTrash / mergeDuplicates / checkLinks /
  * incrementVisitCount / clearAllBookmarks / getVisitHistory / clearVisitHistory /
  * getFolders / addFolder / updateFolder /
  * deleteFolder / clearAllFolders / getTags / addTag / updateTag / deleteTag /
@@ -78,14 +79,39 @@ export interface BulkUpdateBookmarksResult {
   missing: string[]
 }
 
-/** `bulk-delete-bookmarks` 的返回：实际删除条数 + 未找到的 id。 */
+/** `bulk-delete-bookmarks` 的返回：实际**软删除**条数 + 未找到（或已在回收站）的 id。 */
 export interface BulkDeleteBookmarksResult {
   deleted: number
   missing: string[]
 }
 
 /**
- * `merge-duplicates` 的返回：合并的组数 + 删除的条数 + **合并后的完整列表**。
+ * `restore-bookmarks` 的返回：实际恢复条数 + 未找到的 id + **恢复后的未删除列表**。
+ *
+ * `bookmarks` 是全量快照，渲染层据此整体替换本地数组；回收站列表另由
+ * `getDeletedBookmarks()` 重新拉取（恢复后那几条就不在里面了）。
+ */
+export interface RestoreBookmarksResult {
+  restored: number
+  missing: string[]
+  bookmarks: Bookmark[]
+}
+
+/** `purge-bookmarks` 的返回：永久删除条数 + 剩余未删除列表 + 剩余回收站列表。 */
+export interface PurgeBookmarksResult {
+  purged: number
+  bookmarks: Bookmark[]
+  trashed: Bookmark[]
+}
+
+/** `empty-trash` 的返回：永久删除条数 + 剩余未删除列表（回收站必然已清空）。 */
+export interface EmptyTrashResult {
+  purged: number
+  bookmarks: Bookmark[]
+}
+
+/**
+ * `merge-duplicates` 的返回：合并的组数 + 软删除（进回收站）的条数 + **未删除列表**。
  *
  * `bookmarks` 是全量快照，渲染层据此整体替换本地数组（比按 id 增量合并更可靠：
  * donors 消失、keeper 字段被改写，两者一次到位）。
@@ -111,8 +137,19 @@ export interface ElectronAPI {
     ids: string[],
     patch: BulkBookmarkPatch
   ) => Promise<BulkUpdateBookmarksResult>
-  /** `bulk-delete-bookmarks`：`deleted` 为实际删除条数，`missing` 为未找到的 id。 */
+  /** `bulk-delete-bookmarks`：`deleted` 为实际软删除条数，`missing` 为未找到的 id。 */
   bulkDeleteBookmarks: (ids: string[]) => Promise<BulkDeleteBookmarksResult>
+  /** `get-deleted-bookmarks`：回收站列表（只含已删除记录，按 `deletedAt` 倒序）。 */
+  getDeletedBookmarks: () => Promise<Bookmark[]>
+  /**
+   * `restore-bookmarks`：把 `deletedAt` 置 null（一次 IPC = 主进程一次读 + 一次写）。
+   * 不存在 / 本来未删除的 id 计入 `missing`（不报错）。
+   */
+  restoreBookmarks: (ids: string[]) => Promise<RestoreBookmarksResult>
+  /** `purge-bookmarks`：**永久**删除并清理访问历史（不可恢复）。 */
+  purgeBookmarks: (ids: string[]) => Promise<PurgeBookmarksResult>
+  /** `empty-trash`：永久删除全部回收站记录并清理其访问历史。 */
+  emptyTrash: () => Promise<EmptyTrashResult>
   /**
    * `merge-duplicates`：合并重复书签（一次 IPC = 主进程一次读 + 一次写）。
    * 无重复时主进程不写盘，直接返回 `{ groups: 0, removed: 0, bookmarks }`。

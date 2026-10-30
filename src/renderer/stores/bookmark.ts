@@ -14,6 +14,8 @@ export type BulkPatch = BulkBookmarkPatch
 export const useBookmarkStore = defineStore('bookmark', () => {
   const { t } = useI18n()
   const bookmarks = ref<Bookmark[]>([])
+  /** 回收站（已软删除的记录，按 `deletedAt` 倒序）。与 `bookmarks` 互斥，由主进程分流。 */
+  const trashedBookmarks = ref<Bookmark[]>([])
   const loading = ref(false)
 
   const fetchBookmarks = async () => {
@@ -25,6 +27,24 @@ export const useBookmarkStore = defineStore('bookmark', () => {
       console.error(error)
     } finally {
       loading.value = false
+    }
+  }
+
+  /**
+   * 拉取回收站列表。
+   *
+   * `silent = true` 时失败不弹 toast：删除/合并等操作成功后会顺手刷新回收站计数，
+   * 此时再因为「读回收站失败」弹一条错误提示只会让用户困惑（主操作其实成功了）。
+   * 只有用户主动打开回收站（`fetchTrashed()`）才提示 `message.trashLoadFailed`。
+   */
+  const fetchTrashed = async (silent = false) => {
+    try {
+      trashedBookmarks.value = await window.electronAPI.getDeletedBookmarks()
+    } catch (error) {
+      if (!silent) {
+        ElMessage.error(t('message.trashLoadFailed'))
+      }
+      console.error(error)
     }
   }
 
@@ -123,10 +143,18 @@ export const useBookmarkStore = defineStore('bookmark', () => {
     }
   }
 
+  /**
+   * 单条删除 = **软删除**（进回收站，可从「设置 → 回收站」恢复）。
+   *
+   * 主进程不再清理访问历史（可恢复），这里也不再自己做任何历史操作；
+   * 成功后顺手静默刷新回收站计数（`fetchTrashed(true)`），让设置页的「回收站 (N)」
+   * 立刻反映最新数量 —— 计数刷新失败不影响删除本身。
+   */
   const deleteBookmark = async (id: string) => {
     try {
       await window.electronAPI.deleteBookmark(id)
       bookmarks.value = bookmarks.value.filter(b => b.id !== id)
+      await fetchTrashed(true)
       ElMessage.success(t('message.bookmarkDeleted'))
     } catch (error) {
       ElMessage.error(t('message.bookmarkDeleteFailed'))
@@ -170,9 +198,9 @@ export const useBookmarkStore = defineStore('bookmark', () => {
   }
 
   /**
-   * 批量删除：同样**一次 IPC = 一次读 + 一次写**。
-   * 本地按请求的 id 移除（主进程会删掉其中所有存在的记录），
-   * toast 用主进程返回的 `deleted`（真实删除条数）。
+   * 批量删除（**软删除**）：同样**一次 IPC = 一次读 + 一次写**。
+   * 本地按请求的 id 移除（主进程会软删除其中所有存在且未删除的记录），
+   * toast 用主进程返回的 `deleted`（真实软删除条数）；成功后静默刷新回收站计数。
    */
   const bulkDelete = async (ids: string[]): Promise<number> => {
     try {
@@ -182,8 +210,76 @@ export const useBookmarkStore = defineStore('bookmark', () => {
       const removedIds = new Set(ids)
       bookmarks.value = bookmarks.value.filter(bookmark => !removedIds.has(bookmark.id))
 
+      await fetchTrashed(true)
       ElMessage.success(t('message.bulkDeleted', { count: deleted }))
       return deleted
+    } catch (error) {
+      ElMessage.error(t('message.bookmarkDeleteFailed'))
+      console.error(error)
+      throw error
+    }
+  }
+
+  /**
+   * 从回收站恢复（`restore-bookmarks`）。
+   *
+   * - 一次 IPC：主进程一次读 + 一次写；
+   * - 用返回的 `bookmarks`（**未删除**列表）整体替换本地数组，再重新拉回收站，
+   *   两个列表因此永远互斥且一致；
+   * - 成功 toast `message.bookmarksRestored {count}`；失败提示并 rethrow。
+   */
+  const restoreBookmarks = async (ids: string[]): Promise<number> => {
+    try {
+      const result = await window.electronAPI.restoreBookmarks(ids)
+      const list = Array.isArray(result?.bookmarks) ? result.bookmarks : []
+      const restored = typeof result?.restored === 'number' ? result.restored : 0
+
+      bookmarks.value = list
+      await fetchTrashed(true)
+      ElMessage.success(t('message.bookmarksRestored', { count: restored }))
+      return restored
+    } catch (error) {
+      // 复用既有的「更新失败」文案：恢复本质上是把 deletedAt 改回 null
+      ElMessage.error(t('message.bookmarkUpdateFailed'))
+      console.error(error)
+      throw error
+    }
+  }
+
+  /**
+   * 永久删除指定记录（`purge-bookmarks`，不可恢复）。
+   *
+   * 主进程会同时清理这些记录的访问历史；成功后用返回的两个列表整体刷新本地状态。
+   */
+  const purgeBookmarks = async (ids: string[]): Promise<number> => {
+    try {
+      const result = await window.electronAPI.purgeBookmarks(ids)
+      const list = Array.isArray(result?.bookmarks) ? result.bookmarks : []
+      const trashed = Array.isArray(result?.trashed) ? result.trashed : []
+      const purged = typeof result?.purged === 'number' ? result.purged : 0
+
+      bookmarks.value = list
+      trashedBookmarks.value = trashed
+      ElMessage.success(t('message.bookmarksPurged', { count: purged }))
+      return purged
+    } catch (error) {
+      ElMessage.error(t('message.bookmarkDeleteFailed'))
+      console.error(error)
+      throw error
+    }
+  }
+
+  /** 清空回收站（`empty-trash`，不可恢复）：永久删除全部已删除记录并清理其历史。 */
+  const emptyTrash = async (): Promise<number> => {
+    try {
+      const result = await window.electronAPI.emptyTrash()
+      const list = Array.isArray(result?.bookmarks) ? result.bookmarks : []
+      const purged = typeof result?.purged === 'number' ? result.purged : 0
+
+      bookmarks.value = list
+      trashedBookmarks.value = []
+      ElMessage.success(t('message.bookmarksPurged', { count: purged }))
+      return purged
     } catch (error) {
       ElMessage.error(t('message.bookmarkDeleteFailed'))
       console.error(error)
@@ -245,6 +341,8 @@ export const useBookmarkStore = defineStore('bookmark', () => {
     try {
       await window.electronAPI.clearAllBookmarks()
       bookmarks.value = []
+      // 「清空全部数据」也清空回收站（主进程整库清空，含已删除记录）
+      trashedBookmarks.value = []
       ElMessage.success(t('message.allCleared'))
     } catch (error) {
       ElMessage.error(t('message.bookmarkDeleteFailed'))
@@ -258,8 +356,10 @@ export const useBookmarkStore = defineStore('bookmark', () => {
    * 计划（分组 / keeper / donors）由主进程用 `shared/duplicates.ts` 的纯函数算出，
    * 渲染层的预览用的是同一份逻辑，所以「预览里看到的组」与「实际被合并的组」一致。
    *
-   * - **一次 IPC = 主进程一次读 + 一次写**；返回的 `bookmarks` 是合并后的完整列表，
-   *   这里直接整体替换本地数组（donors 消失 + keeper 字段改写一次到位）；
+   * - **一次 IPC = 主进程一次读 + 一次写**；返回的 `bookmarks` 是合并后的**未删除列表**，
+   *   这里直接整体替换本地数组（donors 进回收站 + keeper 字段改写一次到位）；
+   * - donors 是**软删除**（可恢复），因此这里不再有任何历史清理动作；
+   * - 成功后静默刷新回收站计数（`fetchTrashed(true)`），让「回收站 (N)」立刻 +N；
    * - **不弹成功 toast**：汇总由调用方（`MergeDuplicatesDialog`）展示；
    * - 失败提示 `message.mergeDuplicatesFailed` 并 rethrow。
    */
@@ -268,6 +368,8 @@ export const useBookmarkStore = defineStore('bookmark', () => {
       const result = await window.electronAPI.mergeDuplicates()
       const list = Array.isArray(result?.bookmarks) ? result.bookmarks : []
       bookmarks.value = list
+
+      await fetchTrashed(true)
 
       return {
         groups: typeof result?.groups === 'number' ? result.groups : 0,
@@ -299,14 +401,19 @@ export const useBookmarkStore = defineStore('bookmark', () => {
 
   return {
     bookmarks,
+    trashedBookmarks,
     loading,
     fetchBookmarks,
+    fetchTrashed,
     addBookmark,
     updateBookmark,
     togglePin,
     deleteBookmark,
     bulkUpdate,
     bulkDelete,
+    restoreBookmarks,
+    purgeBookmarks,
+    emptyTrash,
     mergeDuplicates,
     checkLinks,
     incrementVisitCount,

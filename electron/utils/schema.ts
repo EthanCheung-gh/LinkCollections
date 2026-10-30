@@ -17,7 +17,7 @@ import { getDataPath, readJsonFile, writeJsonFile } from './storage'
  */
 
 /** 当前代码期望的数据 schema 版本。新增字段/结构变更时自增，并在 MIGRATIONS 里追加一步。 */
-export const DATA_SCHEMA_VERSION = 2
+export const DATA_SCHEMA_VERSION = 3
 
 /** 存放版本号的元数据文件（与 bookmarks.json 等在同一 data 目录下）。 */
 const META_FILE = 'meta.json'
@@ -144,13 +144,52 @@ function migrateAddVisitHistory(): void {
 }
 
 /**
+ * v2 → v3：为书签补软删除标记 `deletedAt`（回收站）。
+ *
+ * - 只在字段**缺失**或**非 `string` / 非 `null`**（如 `undefined` / `0` / `{}`）时补 `null`；
+ *   已经是 `null`（未删除）或合法 ISO 字符串（已删除）的原样保留，**绝不改写已有值**
+ *   —— 否则回收站里的记录会在每次升级时被「复活」；
+ * - 一条都不需要补时**不写盘**，避免每次启动都产生一次无意义的磁盘写入；
+ * - 幂等：重复执行时所有记录都已合法，第二次执行直接返回；
+ * - `bookmarks.json` 读取抛错时让异常向上冒泡：这一步视为失败，上层不会写 meta，
+ *   下次启动会重试（步骤本身幂等，重试无副作用）。
+ */
+function migrateAddDeletedAtToBookmarks(): void {
+  const rawBookmarks = readJsonFile<unknown[]>(BOOKMARKS_FILE, [])
+  let patchedCount = 0
+
+  const migrated = rawBookmarks.map(record => {
+    if (!isPlainObject(record)) {
+      // 非对象条目无法安全地「补字段」：保持原样（读取侧的容错逻辑会继续对付它）
+      console.warn('[schema] Skipping non-object bookmark record while adding `deletedAt`')
+      return record
+    }
+
+    // `null` = 未删除；字符串 = 已删除（ISO 时间）。其余脏值一律收敛为 `null`。
+    if (record.deletedAt === null || typeof record.deletedAt === 'string') {
+      return record
+    }
+
+    patchedCount += 1
+    return { ...record, deletedAt: null }
+  })
+
+  if (patchedCount === 0) {
+    return
+  }
+
+  writeJsonFile(BOOKMARKS_FILE, migrated)
+}
+
+/**
  * 迁移表：按 `version` 升序执行，`version` 是这一步完成后的目标版本。
- * 以后新增迁移只需 append 一行（例如 `{ version: 3, name: '...', run: ... }`），
+ * 以后新增迁移只需 append 一行（例如 `{ version: 4, name: '...', run: ... }`），
  * 并把 {@link DATA_SCHEMA_VERSION} 自增。
  */
 const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: 'add-pinned-to-bookmarks', run: migrateAddPinnedToBookmarks },
-  { version: 2, name: 'add-visit-history', run: migrateAddVisitHistory }
+  { version: 2, name: 'add-visit-history', run: migrateAddVisitHistory },
+  { version: 3, name: 'add-bookmark-deletedAt', run: migrateAddDeletedAtToBookmarks }
 ]
 
 /**

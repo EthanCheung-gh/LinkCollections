@@ -252,6 +252,23 @@
         <div class="settings-item">
           <div class="settings-item-content">
             <div class="settings-item-label">
+              {{ t('settings.trash') }}
+            </div>
+            <div class="settings-item-description">
+              {{ t('settings.trashDesc') }}
+            </div>
+          </div>
+          <el-button
+            type="primary"
+            plain
+            @click="openTrash"
+          >
+            {{ trashButtonLabel }}
+          </el-button>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-content">
+            <div class="settings-item-label">
               {{ t('settings.clearAllData') }}
             </div>
             <div class="settings-item-description">
@@ -281,11 +298,12 @@
       v-model="mergeDuplicatesVisible"
       :plan="mergeDuplicatesPlan"
     />
+    <TrashDialog v-model="trashVisible" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { computed, ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
@@ -295,6 +313,7 @@ import type { LinkCheckResult } from '../../types/global'
 import ImportExport from './ImportExport.vue'
 import LinkCheckDialog from './LinkCheckDialog.vue'
 import MergeDuplicatesDialog from './MergeDuplicatesDialog.vue'
+import TrashDialog from './TrashDialog.vue'
 import { planDuplicateMerges, type DuplicateMergePlan } from '../../../../shared/duplicates'
 import { DEFAULT_FAVICON_SERVICES } from '../../utils/favicon'
 import { THEME_COLORS } from '../../types/settings'
@@ -342,6 +361,24 @@ const mergeDuplicatesPlan = ref<DuplicateMergePlan | null>(null)
 const openMergeDuplicates = () => {
   mergeDuplicatesPlan.value = planDuplicateMerges(bookmarkStore.bookmarks, new Date())
   mergeDuplicatesVisible.value = true
+}
+
+/**
+ * 回收站：入口按钮上直接显示数量（`回收站 (3)`），让用户不用打开弹窗就知道里面有没有东西。
+ * 数量来自 store 的 `trashedBookmarks`（主进程 `get-deleted-bookmarks`），
+ * 删除/合并成功后 store 会静默刷新它，因此这里不需要额外轮询。
+ */
+const trashVisible = ref(false)
+
+const trashButtonLabel = computed(() => {
+  const count = bookmarkStore.trashedBookmarks.length
+  return count > 0 ? `${t('settings.trashAction')} (${count})` : t('settings.trashAction')
+})
+
+const openTrash = () => {
+  // 打开前先拉一次最新列表：弹窗内部也会再拉一次，但这样按钮上的数量立刻就是准的
+  void bookmarkStore.fetchTrashed()
+  trashVisible.value = true
 }
 
 const themeColors = THEME_COLORS
@@ -579,6 +616,9 @@ const clearAllData = async () => {
 
 onMounted(async () => {
   await fetchSettings()
+
+  // 回收站计数：静默拉一次（失败不打扰用户，弹窗打开时会再拉一次并给出错误提示）
+  void bookmarkStore.fetchTrashed(true)
 
   if (settings.value) {
     localSettings.value = {

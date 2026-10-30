@@ -60,6 +60,8 @@ const candidate = (over: Partial<DuplicateCandidate> = {}): DuplicateCandidate =
   lastVisited: null,
   createdAt: '2024-01-01T00:00:00.000Z',
   pinned: false,
+  // schema v3 之后落盘对象恒有该键；`null` = 未删除
+  deletedAt: null,
   ...over
 })
 
@@ -514,7 +516,7 @@ describe('merge-duplicates（主进程）', () => {
     }
   })
 
-  it('一次写入完成合并：keeper 位置不变、donors 被删除、字段已合并', async () => {
+  it('一次写入完成合并：keeper 位置不变、donors 进回收站、字段已合并', async () => {
     writeBookmarks([
       { ...candidate({ id: 'a1', url: 'https://Example.com/', title: '', visitCount: 3 }), tags: ['t1'] },
       candidate({ id: 'u1', url: 'https://unique.example.com/', title: 'U1' }),
@@ -539,10 +541,23 @@ describe('merge-duplicates（主进程）', () => {
       expect(result.removed).toBe(3)
 
       const saved = readBookmarks()
-      // keeper 留在原来的位置，donors 被删除（其余记录相对顺序不变）
-      expect(saved.map(bookmark => bookmark.id)).toEqual(['a1', 'u1', 'b1', 'c2'])
+      // donors 是**软删除**（写 deletedAt），记录与顺序都不变：keeper 仍在原下标
+      expect(saved.map(bookmark => bookmark.id)).toEqual(['a1', 'u1', 'a2', 'b1', 'b2', 'c1', 'c2'])
+
+      const donorIds = ['a2', 'b2', 'c1']
+      for (const id of donorIds) {
+        const donor = saved.find(bookmark => bookmark.id === id)
+        expect(donor).toBeDefined()
+        expect(typeof donor?.deletedAt).toBe('string')
+      }
+
+      // 未被合并的记录不受影响
+      const unique = saved.find(bookmark => bookmark.id === 'u1')
+      expect(unique?.deletedAt).toBeNull()
 
       const keeper = saved[0]
+      expect(keeper.id).toBe('a1')
+      expect(keeper.deletedAt).toBeNull()
       expect(keeper.url).toBe('https://Example.com/') // url 取 keeper
       expect(keeper.title).toBe('A2') // keeper 标题为空 → 回填组内第一个非空
       expect(keeper.tags).toEqual(['t1'])
@@ -551,16 +566,18 @@ describe('merge-duplicates（主进程）', () => {
       expect(keeper.updatedAt).not.toBe('2024-01-01T00:00:00.000Z')
 
       // keeper 不在首位时同样保留原下标（c2 仍在最后，不会被搬到组内首位）
-      expect(saved[3].pinned).toBe(true)
+      const pinnedKeeper = saved.find(bookmark => bookmark.id === 'c2')
+      expect(pinnedKeeper?.pinned).toBe(true)
+      expect(pinnedKeeper?.deletedAt).toBeNull()
 
-      // 返回的完整列表与落盘内容一致
-      expect(result.bookmarks).toEqual(saved)
+      // 返回的列表只含**未删除**记录（与主列表 `get-bookmarks` 一致）
+      expect(result.bookmarks.map(bookmark => bookmark.id)).toEqual(['a1', 'u1', 'b1', 'c2'])
     } finally {
       renameSpy.mockRestore()
     }
   })
 
-  it('donors 的访问历史被清理（一次读写），合并结果不受影响', async () => {
+  it('donors 只是软删除：访问历史保留（可恢复），合并结果不受影响', async () => {
     const historyFile = path.join(dataDir, 'history.json')
     fs.writeFileSync(
       historyFile,
@@ -578,7 +595,11 @@ describe('merge-duplicates（主进程）', () => {
     const result = await invokeMerge()
 
     expect(result.removed).toBe(1)
+    // 软删除可恢复 → 历史必须留着，否则恢复后趋势图会凭空少一段
     const history = JSON.parse(fs.readFileSync(historyFile, 'utf-8'))
-    expect(history).toEqual([{ bookmarkId: 'a1', visitedAt: '2024-04-01T00:00:00.000Z' }])
+    expect(history).toEqual([
+      { bookmarkId: 'a1', visitedAt: '2024-04-01T00:00:00.000Z' },
+      { bookmarkId: 'a2', visitedAt: '2024-04-02T00:00:00.000Z' }
+    ])
   })
 })

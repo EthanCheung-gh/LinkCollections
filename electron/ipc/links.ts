@@ -78,6 +78,8 @@ interface StoredBookmark {
   id: string
   url: string
   linkStatus?: LinkStatus
+  /** 软删除标记（回收站）：`null` / 缺失 = 未删除，非空字符串 = 已删除 */
+  deletedAt?: string | null
   [key: string]: unknown
 }
 
@@ -314,6 +316,19 @@ function dedupeIds(value: unknown): string[] {
   return result
 }
 
+/**
+ * 记录是否在回收站里（软删除）。
+ *
+ * 与 `ipc/bookmarks.ts` 的 `isDeleted` **同一口径**（只有非空字符串才算已删除），
+ * 但这里刻意内联而不是 import：`ipc/bookmarks.ts` 是个大模块（注册全部书签通道），
+ * 为一个谓词把它整个拖进死链检查的依赖里没有收益；而 `StoredBookmark` 带索引签名
+ * （`[key: string]: unknown`），也不适合直接套用那边的泛型签名。
+ */
+function isTrashed(bookmark: StoredBookmark): boolean {
+  const { deletedAt } = bookmark
+  return typeof deletedAt === 'string' && deletedAt !== ''
+}
+
 /** 同一时刻只允许一轮检查：渲染层按钮会禁用，这里是主进程侧的最后一道闸 */
 let isChecking = false
 
@@ -339,7 +354,10 @@ export function registerLinkHandlers(): void {
 
       const requestedIds = Array.isArray(ids) ? dedupeIds(ids) : null
       const idFilter = requestedIds ? new Set(requestedIds) : null
-      const targets = idFilter ? bookmarks.filter(bookmark => idFilter.has(bookmark.id)) : bookmarks
+      // 只检查**未删除**的记录：回收站里的书签不该再产生网络请求，
+      // 也不该被写回新的 linkStatus（它们对用户不可见，检查结果没有意义）。
+      const targets = (idFilter ? bookmarks.filter(bookmark => idFilter.has(bookmark.id)) : bookmarks)
+        .filter(bookmark => !isTrashed(bookmark))
 
       if (targets.length === 0) {
         console.log('[check-links] No bookmarks to check')

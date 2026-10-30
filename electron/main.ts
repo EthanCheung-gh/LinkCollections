@@ -1,7 +1,7 @@
 import { app, BrowserWindow, session, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { registerBookmarkHandlers } from './ipc/bookmarks'
+import { registerBookmarkHandlers, purgeExpiredTrash, TRASH_RETENTION_DAYS } from './ipc/bookmarks'
 import { registerHistoryHandlers } from './ipc/history'
 import { registerFolderHandlers } from './ipc/folders'
 import { registerTagHandlers } from './ipc/tags'
@@ -235,6 +235,20 @@ app.whenReady().then(() => {
     }
   } catch (error) {
     console.error('[schema] Data migration failed; continuing startup with existing data:', error)
+  }
+
+  // 回收站保留期清理：必须在**迁移之后**（v3 保证每条记录都有 `deletedAt`），
+  // 且在**建窗之前**（界面第一次读到的数据就是干净的）。
+  // 失败不阻塞启动：清理只是维护动作，下次启动会重试。
+  try {
+    const { purged } = purgeExpiredTrash()
+    console.log(
+      purged > 0
+        ? `[trash] Purged ${purged} expired bookmark(s) (retention: ${TRASH_RETENTION_DAYS} days)`
+        : '[trash] No expired bookmarks to purge'
+    )
+  } catch (error) {
+    console.error('[trash] Failed to purge expired bookmarks; continuing startup:', error)
   }
 
   registerBookmarkHandlers()

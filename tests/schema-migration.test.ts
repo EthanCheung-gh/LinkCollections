@@ -50,12 +50,13 @@ describe('数据 schema 迁移', () => {
     writeJson(path.join(dataDir, 'history.json'), [
       { bookmarkId: 'x', visitedAt: '2024-01-01T00:00:00.000Z' }
     ])
-    const { runDataMigrations } = await import('../electron/utils/schema')
+    const { runDataMigrations, DATA_SCHEMA_VERSION } = await import('../electron/utils/schema')
     runDataMigrations()
     expect(readJson(path.join(dataDir, 'history.json'))).toEqual([
       { bookmarkId: 'x', visitedAt: '2024-01-01T00:00:00.000Z' }
     ])
-    expect(readJson(path.join(dataDir, 'meta.json'))).toEqual({ schemaVersion: 2 })
+    // 迁移会继续往后跑（v2 → v3 补 deletedAt），因此 meta 落在当前版本
+    expect(readJson(path.join(dataDir, 'meta.json'))).toEqual({ schemaVersion: DATA_SCHEMA_VERSION })
   })
 
   it('重复执行幂等：第二次不产生任何写入', async () => {

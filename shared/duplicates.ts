@@ -43,6 +43,14 @@ export interface DuplicateCandidate {
   createdAt?: string
   pinned?: boolean
   linkStatus?: DuplicateLinkStatus | null
+  /**
+   * 软删除标记（回收站）：`null` / 缺失 = 未删除，非空字符串 = 已删除。
+   *
+   * **已删除的记录不参与分组**（见 {@link isDeletedCandidate}）：它们既不会被选成
+   * keeper，也不会被当成 donor 软删除，更不会「复活」到合并结果里。
+   * 这个字段本身只用于过滤，不会出现在 {@link MergedBookmarkFields} 里。
+   */
+  deletedAt?: string | null
 }
 
 /** 合并后写回 keeper 的字段集合（`id` 单独放在 {@link MergedBookmark} 上）。 */
@@ -126,6 +134,18 @@ function toLinkStatus(value: unknown): DuplicateLinkStatus | undefined {
   return value as DuplicateLinkStatus
 }
 
+/**
+ * 候选记录是否在回收站里（与主进程 `ipc/bookmarks.ts` 的 `isDeleted` 同一口径）。
+ *
+ * 只有**非空字符串**才算已删除：`null` / 缺失 / `''` / 脏值都视为未删除，
+ * 避免一条脏数据把书签从合并计划里「藏掉」。
+ */
+export function isDeletedCandidate(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const { deletedAt } = value as { deletedAt?: unknown }
+  return typeof deletedAt === 'string' && deletedAt !== ''
+}
+
 /** `ok` 是否已有结论（`true` / `false`；`null` 或缺失 = unknown，不参与回填） */
 function hasLinkConclusion(status: DuplicateLinkStatus): boolean {
   return status.ok === true || status.ok === false
@@ -167,6 +187,8 @@ function compareKeeperPriority(a: DuplicateCandidate, b: DuplicateCandidate): nu
  * - **键为空（URL 为空 / 不可解析）不参与分组**：否则所有脏 URL 会被合成一组，
  *   合并后只剩一条，等于静默删除用户数据；
  * - **没有 id 的记录不参与分组**：合并按 id 定位/删除记录，缺 id 无法安全处理；
+ * - **已删除（回收站里）的记录不参与分组**：它们既不会被选成 keeper，也不会被
+ *   当成 donor 再次软删除，更不会「复活」到合并结果里（见 {@link isDeletedCandidate}）；
  * - **只返回成员数 ≥ 2 的组**（单条不构成重复）；
  * - Map 的迭代顺序 = 组键首次出现的顺序，组内成员顺序 = 入参数组顺序（供 keeper 回填
  *   「组内第一个非空值」时使用）。
@@ -181,6 +203,8 @@ export function groupDuplicates(
     if (!item || typeof item !== 'object') continue
     // 缺 id：无法在合并时定位具体记录，直接跳过（不参与分组，也不会被删除）
     if (toStringValue(item.id) === '') continue
+    // 回收站里的记录：不参与分组（已删除的不该被合并，也不该被「复活」）
+    if (isDeletedCandidate(item)) continue
 
     const key = normalizeUrlKey(item.url)
     if (!key) continue
@@ -327,6 +351,9 @@ export function mergeGroup(
  * - `keepers`：每个 keeper 的 id 与要写回的字段；
  * - `donorIds`：将被丢弃的记录 id（去重后，不含 keeper）；
  * - `groups`：UI 预览数据（组键 + keeper id + 全部成员 id）。
+ *
+ * **已删除（回收站里）的记录不参与计划**：分组交给 {@link groupDuplicates}，它在那里
+ * 就已经跳过了它们，因此既不会出现「keeper 是回收站记录」，也不会把已删除记录算成 donor。
  *
  * 不修改入参：分组只持有引用，合并结果全部新建对象；`now` 可注入，便于离线测试。
  */

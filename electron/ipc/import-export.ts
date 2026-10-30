@@ -97,6 +97,11 @@ function normalizeNameKey(name: unknown): string {
 /**
  * URL 去重键：实现已抽到 `shared/url-key.ts`（导入去重与重复书签合并共用）。
  * 这里保留同名调用点，因此本文件其余逻辑一字未改。
+ *
+ * 注意（回收站）：merge 模式传入的是 `previousBookmarks` = **整个 bookmarks.json**，
+ * 其中**包含已删除（回收站里）的记录**。这是有意的：一个还在回收站里的 URL 不应该
+ * 被重新导入成一条新书签（否则用户会看到「删掉的书又回来了」）。replace 模式不建索引，
+ * 整库替换时回收站也一并被清空。
  */
 function buildUrlIndex(bookmarks: Array<{ url?: unknown }>): Set<string> {
   const index = new Set<string>()
