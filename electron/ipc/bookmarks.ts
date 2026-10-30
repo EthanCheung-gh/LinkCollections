@@ -18,6 +18,21 @@ interface Bookmark {
   lastVisited: string | null
   /** 置顶标记：落盘对象里恒为布尔（旧数据由 utils/schema.ts 的迁移补齐） */
   pinned: boolean
+  /**
+   * 死链检查结果（可选，缺失 = 从未检查过）。
+   *
+   * **只由主进程 `check-links`（ipc/links.ts）写入**：`update-bookmark` 与
+   * `bulk-update-bookmarks` 的字段白名单里都没有它，渲染层无法改写。
+   * `ok: null` = unknown（401/403/429/5xx 等无法判定的情况）。
+   *
+   * 因为字段可选，旧数据天然兼容，**不需要新的 schema 迁移**。
+   */
+  linkStatus?: {
+    ok: boolean | null
+    status: number | null
+    checkedAt: string
+    error?: string
+  }
   createdAt: string
   updatedAt: string
 }

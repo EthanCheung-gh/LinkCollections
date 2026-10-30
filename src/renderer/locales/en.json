@@ -151,7 +151,10 @@
     "chooseTheme": "Choose your preferred theme",
     "chooseLanguage": "Choose your preferred language",
     "primaryBrowser": "Primary browser for opening links",
-    "additionalBrowsers": "Additional browsers to choose from"
+    "additionalBrowsers": "Additional browsers to choose from",
+    "checkLinks": "Check Dead Links",
+    "checkLinksDesc": "Verify that every bookmark still opens (HTTP HEAD, falling back to GET)",
+    "checkingLinks": "Checking..."
   },
   "importExport": {
     "title": "Import / Export",
@@ -172,6 +175,14 @@
     "htmlFormat": "HTML",
     "replaceMode": "Replace existing data",
     "mergeModeDesc": "Add to existing data"
+  },
+  "links": {
+    "title": "Dead Link Check",
+    "summary": "{ok} working, {broken} broken, {unknown} unknown",
+    "allGood": "Every checked bookmark is reachable",
+    "deleteBroken": "Delete broken bookmarks",
+    "statusCode": "HTTP {status}",
+    "unknownReason": "Reason unknown"
   },
   "stats": {
     "title": "Statistics",
@@ -269,6 +280,7 @@
     "settingsSaveFailed": "Failed to save settings",
     "bulkUpdated": "{count} bookmarks updated",
     "bulkDeleted": "{count} bookmarks deleted",
-    "historyLoadFailed": "Failed to load visit history"
+    "historyLoadFailed": "Failed to load visit history",
+    "linkCheckFailed": "Failed to check links"
   }
 }

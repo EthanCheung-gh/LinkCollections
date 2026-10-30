@@ -151,7 +151,10 @@
     "chooseTheme": "选择您喜欢的主题",
     "chooseLanguage": "选择您喜欢的语言",
     "primaryBrowser": "打开链接的主浏览器",
-    "additionalBrowsers": "备选浏览器"
+    "additionalBrowsers": "备选浏览器",
+    "checkLinks": "检查失效链接",
+    "checkLinksDesc": "确认每个书签是否仍可访问（先用 HEAD，失败时退回 GET）",
+    "checkingLinks": "检查中..."
   },
   "importExport": {
     "title": "导入 / 导出",
@@ -172,6 +175,14 @@
     "htmlFormat": "HTML",
     "replaceMode": "替换现有数据",
     "mergeModeDesc": "添加到现有数据"
+  },
+  "links": {
+    "title": "失效链接检查",
+    "summary": "{ok} 个正常，{broken} 个失效，{unknown} 个无法确定",
+    "allGood": "检查到的书签都可以正常访问",
+    "deleteBroken": "删除失效书签",
+    "statusCode": "HTTP {status}",
+    "unknownReason": "原因未知"
   },
   "stats": {
     "title": "统计",
@@ -269,6 +280,7 @@
     "settingsSaveFailed": "保存设置失败",
     "bulkUpdated": "已更新 {count} 个书签",
     "bulkDeleted": "已删除 {count} 个书签",
-    "historyLoadFailed": "加载访问历史失败"
+    "historyLoadFailed": "加载访问历史失败",
+    "linkCheckFailed": "检查失效链接失败"
   }
 }

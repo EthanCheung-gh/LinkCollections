@@ -13,11 +13,13 @@
     "build": "npm run build:electron",
     "build:electron": "electron-vite build",
     "build:web": "vite build",
+    "build:win": "npm run build && electron-builder --win",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "type-check": "vue-tsc --noEmit",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
-    "format": "prettier --write src/",
-    "build:win": "npm run build && electron-builder --win"
+    "format": "prettier --write src/"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
@@ -47,6 +49,7 @@
     "vite": "^5.0.0",
     "vite-plugin-electron": "^0.28.0",
     "vite-plugin-electron-renderer": "^0.14.5",
+    "vitest": "^3.2.7",
     "vue-tsc": "^3.2.2"
   },
   "build": {

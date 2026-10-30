@@ -15,6 +15,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   bulkUpdateBookmarks: (ids: string[], patch: any) =>
     ipcRenderer.invoke('bulk-update-bookmarks', ids, patch),
   bulkDeleteBookmarks: (ids: string[]) => ipcRenderer.invoke('bulk-delete-bookmarks', ids),
+  /**
+   * 死链检查：省略 `ids` = 检查全部书签。
+   * 主进程侧一次读盘 + 一次写盘，返回汇总与本次检查过的书签（已带新 `linkStatus`）。
+   * 同一时刻只允许一轮检查在跑（主进程有闸门，UI 也会禁用按钮）。
+   */
+  checkLinks: (ids?: string[]) => ipcRenderer.invoke('check-links', ids),
   incrementVisitCount: (id: string) => ipcRenderer.invoke('increment-visit-count', id),
   clearAllBookmarks: () => ipcRenderer.invoke('clearAllBookmarks'),
   /** 逐次访问记录（趋势图数据源）：数组，元素 `{ bookmarkId, visitedAt }` */

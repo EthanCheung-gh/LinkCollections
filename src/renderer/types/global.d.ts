@@ -1,9 +1,9 @@
 /**
  * `window.electronAPI` 的类型契约。
  *
- * 必须与 `electron/preload.ts` 暴露的 25 个方法**逐一对应**：
+ * 必须与 `electron/preload.ts` 暴露的 26 个方法**逐一对应**：
  * openBrowser / getBookmarks / addBookmark / updateBookmark / deleteBookmark /
- * bulkUpdateBookmarks / bulkDeleteBookmarks /
+ * bulkUpdateBookmarks / bulkDeleteBookmarks / checkLinks /
  * incrementVisitCount / clearAllBookmarks / getVisitHistory / clearVisitHistory /
  * getFolders / addFolder / updateFolder /
  * deleteFolder / clearAllFolders / getTags / addTag / updateTag / deleteTag /
@@ -12,7 +12,27 @@
  * 返回值均以对应 `ipcMain.handle` 的实际返回值为准；失败时主进程 `throw`，
  * 渲染进程侧表现为 rejected Promise（不是 `{ success: false }`）。
  */
-import type { Bookmark, Folder, Tag, Settings, VisitRecord } from './index'
+import type { Bookmark, Folder, LinkStatus, Tag, Settings, VisitRecord } from './index'
+
+/**
+ * `Bookmark.linkStatus` 的形状定义在 `types/bookmark.ts`（与字段所有者放在一起），
+ * 这里转出，便于 IPC 契约的消费方从同一个入口引用。
+ */
+export type { LinkStatus }
+
+/**
+ * `ipcMain.handle('check-links')` 的返回。
+ *
+ * `bookmarks` 只包含**本次实际检查过**的记录（已带新的 `linkStatus`），
+ * 渲染层按 id 替换本地记录即可（与 `bulk-update-bookmarks` 的 `updated` 同语义）。
+ */
+export interface LinkCheckResult {
+  checked: number
+  broken: number
+  unknown: number
+  ok: number
+  bookmarks: Bookmark[]
+}
 
 /** `ipcMain.handle('export-data')` 的返回：用户取消时 `canceled: true` 且无 `filePath`。 */
 export interface ExportResult {
@@ -81,6 +101,11 @@ export interface ElectronAPI {
   ) => Promise<BulkUpdateBookmarksResult>
   /** `bulk-delete-bookmarks`：`deleted` 为实际删除条数，`missing` 为未找到的 id。 */
   bulkDeleteBookmarks: (ids: string[]) => Promise<BulkDeleteBookmarksResult>
+  /**
+   * `check-links`：死链检查。省略 `ids` = 检查全部书签。
+   * 主进程一次读盘 + 一次写盘并返回汇总；目标为空时返回全 0 且不写盘。
+   */
+  checkLinks: (ids?: string[]) => Promise<LinkCheckResult>
   /** `increment-visit-count`：返回更新后的书签（含新的 visitCount/lastVisited）。 */
   incrementVisitCount: (id: string) => Promise<Bookmark>
   /** `clearAllBookmarks`：成功恒为 `true`，失败 reject。 */

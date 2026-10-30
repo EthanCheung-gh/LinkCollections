@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Bookmark } from '../types'
-import type { BulkBookmarkPatch } from '../types/global'
+import type { BulkBookmarkPatch, LinkCheckResult } from '../types/global'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 
@@ -191,6 +191,36 @@ export const useBookmarkStore = defineStore('bookmark', () => {
     }
   }
 
+  /**
+   * 死链检查（`check-links`）。
+   *
+   * 与批量通道同一形状：**一次 IPC = 主进程一次读 + 一次写**，网络探测全在主进程做
+   * （渲染进程受 CSP `connect-src 'self'` 限制，也拿不到 8s 超时/并发控制）。
+   *
+   * - 省略 `ids` = 检查全部书签；
+   * - 成功后按 id 把返回的书签替换进本地数组（只替换本次检查过的那些）；
+   * - **不弹成功 toast**：结果由 `LinkCheckDialog` 展示，多一条提示只会打扰用户；
+   * - 失败提示 `message.linkCheckFailed` 并 rethrow，由调用方决定后续动作。
+   */
+  const checkLinks = async (ids?: string[]): Promise<LinkCheckResult> => {
+    try {
+      const result = await window.electronAPI.checkLinks(ids)
+      const updatedList = Array.isArray(result?.bookmarks) ? result.bookmarks : []
+
+      if (updatedList.length > 0) {
+        // 逐条替换进本地数组（按 id 建索引，避免 O(n²) 的 findIndex）
+        const updatedById = new Map(updatedList.map(bookmark => [bookmark.id, bookmark]))
+        bookmarks.value = bookmarks.value.map(bookmark => updatedById.get(bookmark.id) ?? bookmark)
+      }
+
+      return result
+    } catch (error) {
+      ElMessage.error(t('message.linkCheckFailed'))
+      console.error(error)
+      throw error
+    }
+  }
+
   const incrementVisitCount = async (id: string) => {
     try {
       // 类型来自 types/global.d.ts 的 ElectronAPI.incrementVisitCount，
@@ -249,6 +279,7 @@ export const useBookmarkStore = defineStore('bookmark', () => {
     deleteBookmark,
     bulkUpdate,
     bulkDelete,
+    checkLinks,
     incrementVisitCount,
     clearAllBookmarks,
     searchBookmarks

@@ -216,6 +216,25 @@
         <div class="settings-item">
           <div class="settings-item-content">
             <div class="settings-item-label">
+              {{ t('settings.checkLinks') }}
+            </div>
+            <div class="settings-item-description">
+              {{ t('settings.checkLinksDesc') }}
+            </div>
+          </div>
+          <el-button
+            type="primary"
+            plain
+            :loading="checkingLinks"
+            :disabled="checkingLinks"
+            @click="handleCheckLinks"
+          >
+            {{ checkingLinks ? t('settings.checkingLinks') : t('settings.checkLinks') }}
+          </el-button>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-content">
+            <div class="settings-item-label">
               {{ t('settings.clearAllData') }}
             </div>
             <div class="settings-item-description">
@@ -239,6 +258,8 @@
       >        {{ t('common.save') }}
       </el-button>
     </div>
+
+    <LinkCheckDialog v-model="linkCheckVisible" :result="linkCheckResult" />
   </div>
 </template>
 
@@ -249,7 +270,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { storeToRefs } from 'pinia'
 import { useUIStore, useBookmarkStore, useFolderStore, useTagStore } from '../../stores'
 import type { Settings } from '../../types'
+import type { LinkCheckResult } from '../../types/global'
 import ImportExport from './ImportExport.vue'
+import LinkCheckDialog from './LinkCheckDialog.vue'
 import { DEFAULT_FAVICON_SERVICES } from '../../utils/favicon'
 import { THEME_COLORS } from '../../types/settings'
 
@@ -277,6 +300,14 @@ const localSettings = ref<Settings>({
 
 const defaultBrowserName = ref('')
 const defaultBrowserPath = ref('')
+
+/**
+ * 死链检查：按钮 loading 期间禁用（同一时刻只允许一轮检查），
+ * 结果交给 `LinkCheckDialog` 展示 —— 这里不弹 toast，弹窗本身就是结果入口。
+ */
+const checkingLinks = ref(false)
+const linkCheckVisible = ref(false)
+const linkCheckResult = ref<LinkCheckResult | null>(null)
 
 const themeColors = THEME_COLORS
 
@@ -473,6 +504,22 @@ const resetToDefaults = async () => {
   applyTheme(localSettings.value.theme, localSettings.value.themeColor)
   await applyLanguage(localSettings.value.language)
   ElMessage.success(t('settings.resetSuccess'))
+}
+
+const handleCheckLinks = async () => {
+  if (checkingLinks.value) return
+
+  checkingLinks.value = true
+  try {
+    // 不传 ids = 检查全部书签；max(4) 并发与 8s 超时都在主进程侧
+    linkCheckResult.value = await bookmarkStore.checkLinks()
+    linkCheckVisible.value = true
+  } catch (error) {
+    // store 已经提示过 message.linkCheckFailed，这里只保留日志
+    console.error(error)
+  } finally {
+    checkingLinks.value = false
+  }
 }
 
 const clearAllData = async () => {

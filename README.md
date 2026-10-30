@@ -44,6 +44,8 @@
 - **损坏自愈** - JSON 解析失败或结构异常时自动备份为 `<name>.corrupt-<时间戳>.json`，不会静默覆盖
 - **Schema 版本与迁移** - `meta.json` 记录数据版本，启动时按表驱动执行迁移；幂等、失败不推进版本
 - **导入 / 导出** - JSON 与 Netscape HTML 双向支持；合并模式按文件夹名、标签名、归一化 URL 去重，id 重新映射，写入失败自动回滚
+- **失效链接检查** - 一键批量探测全部书签（HEAD 优先、失败回退 GET，并发 4、单请求 8s 超时），
+  结果分为「正常 / 失效 / 无法确定」三类并写入书签；可一键删除确认失效的链接
 - **清空与重置** - 一键清空数据或恢复默认设置
 
 ### 📊 数据统计
@@ -224,6 +226,8 @@ LinkCollections/
 │       ├── bookmarks.ts          # 书签 CRUD + 访问计数 + 批量更新/删除
 │       ├── folders.ts            # 文件夹 CRUD（多级、防环、删除时子级上提）
 │       ├── tags.ts               # 标签 CRUD
+│       ├── history.ts            # 访问历史（90 天 / 5000 条上限）
+│       ├── links.ts              # 失效链接检查（HEAD→GET、并发 4、8s 超时）
 │       ├── settings.ts           # 设置、打开浏览器（协议/路径白名单）
 │       └── import-export.ts      # JSON / Netscape HTML 导入导出（去重、回滚）
 ├── src/renderer/                 # 渲染进程
@@ -238,13 +242,14 @@ LinkCollections/
 │   │   ├── Sidebar/              # 文件夹树、标签、搜索与历史
 │   │   ├── Header/               # 标题、搜索、新建、选择模式、视图切换
 │   │   ├── Modal/                # 增改书签 / 文件夹 / 标签
-│   │   ├── Stats/                # 统计页
-│   │   └── Settings/             # 设置页与导入导出
+│   │   ├── Stats/                # 统计页（含访问趋势）
+│   │   └── Settings/             # 设置页、导入导出、失效链接检查
 │   ├── stores/                   # Pinia：bookmark / folder / tag / ui
 │   │                             # search / selection / sort
 │   ├── utils/                    # highlight（转义高亮）、validation、favicon
 │   ├── locales/                  # en.json / zh.json
 │   └── types/                    # 渲染层类型与 electronAPI 契约
+├── tests/                       # vitest 单元测试（工具函数 / store / 主进程纯逻辑）
 ├── screenshots/                  # README 截图
 ├── electron.vite.config.ts        # 主进程/预加载/渲染进程构建 + CSP meta 注入
 ├── vite.config.ts                 # 纯 Web 预览/构建
@@ -264,6 +269,8 @@ LinkCollections/
 | `npm run build:win` | 构建并打包 Windows 安装包 |
 | `npm run build:web` | 构建纯 Web 静态资源到 `dist-web` |
 | `npm run preview` | 预览 Web 构建产物 |
+| `npm test` | 运行单元测试（vitest，单次） |
+| `npm run test:watch` | 监听模式运行单元测试 |
 | `npm run type-check` | TypeScript 类型检查（`vue-tsc --noEmit`） |
 | `npm run lint` | ESLint 检查并自动修复 |
 | `npm run format` | Prettier 格式化 `src/` |
@@ -285,13 +292,15 @@ LinkCollections/
 - JSON / Netscape HTML 导入导出（去重、id 重映射、失败回滚）
 - 数据 schema 版本与迁移框架
 - 访问历史记录与统计页趋势图（7 / 30 / 90 天）
+- 失效链接检查（HEAD/GET 探测、三类结果、批量清理）
+- 最小单元测试基建（vitest，覆盖工具函数、store 纯逻辑、主进程迁移与保留策略）
 - 安全加固：渲染进程沙箱、严格 CSP、外链与写入白名单、XSS 转义
 
 ### 📋 计划中
 
-- [ ] 单元测试与 E2E 测试
+- [ ] E2E 测试（组件渲染与 Electron 窗口行为）
+- [ ] 重复书签合并
 - [ ] 回收站（软删除与恢复）
-- [ ] 死链检查与重复书签合并
 - [ ] 全局快捷键、系统托盘与快速添加浮窗
 - [ ] 自动更新
 - [ ] 浏览器书签文件直读导入
@@ -317,6 +326,7 @@ LinkCollections/
 - 样式统一使用 `--lc-*` 设计变量，不硬编码颜色、间距、圆角、字号
 - 新增 IPC 通道需同步更新 `electron/preload.ts` 与 `src/renderer/types/global.d.ts`
 - 修改数据结构需同时新增一条 schema 迁移（`electron/utils/schema.ts`）
+- 新增纯逻辑（工具函数、store 计算、主进程辅助函数）请补 `tests/` 下的 vitest 用例
 - 界面文案放入 `src/renderer/locales/{en,zh}.json`，保持两个语言键集一致
 
 ---

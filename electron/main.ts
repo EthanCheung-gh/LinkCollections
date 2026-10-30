@@ -7,6 +7,7 @@ import { registerFolderHandlers } from './ipc/folders'
 import { registerTagHandlers } from './ipc/tags'
 import { registerSettingsHandlers } from './ipc/settings'
 import { registerImportExportHandlers } from './ipc/import-export'
+import { registerLinkHandlers } from './ipc/links'
 import { runDataMigrations } from './utils/schema'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -243,6 +244,8 @@ app.whenReady().then(() => {
   registerTagHandlers()
   registerSettingsHandlers()
   registerImportExportHandlers()
+  // 死链检查：只读写 bookmarks.json，不依赖其它 IPC 通道，放在最后注册
+  registerLinkHandlers()
   createWindow()
 })
 
