@@ -1,17 +1,22 @@
 /**
  * `window.electronAPI` 的类型契约。
  *
- * 必须与 `electron/preload.ts` 暴露的 31 个方法**逐一对应**：
+ * 必须与 `electron/preload.ts` 暴露的 31 + 4 = **35** 个方法**逐一对应**：
  * openBrowser / getBookmarks / addBookmark / updateBookmark / deleteBookmark /
  * bulkUpdateBookmarks / bulkDeleteBookmarks / getDeletedBookmarks /
  * restoreBookmarks / purgeBookmarks / emptyTrash / mergeDuplicates / checkLinks /
  * incrementVisitCount / clearAllBookmarks / getVisitHistory / clearVisitHistory /
  * getFolders / addFolder / updateFolder /
  * deleteFolder / clearAllFolders / getTags / addTag / updateTag / deleteTag /
- * clearAllTags / getSettings / updateSettings / exportData / importData
+ * clearAllTags / getSettings / updateSettings / exportData / importData /
+ * closeQuickAdd / notifyBookmarksChanged / onBookmarksChanged / onTrayOpenView
  *
  * 返回值均以对应 `ipcMain.handle` 的实际返回值为准；失败时主进程 `throw`，
  * 渲染进程侧表现为 rejected Promise（不是 `{ success: false }`）。
+ *
+ * 后 4 个是「系统托盘 + 快速添加浮窗」引入的：
+ * - `closeQuickAdd` / `notifyBookmarksChanged`：invoke，无返回值；
+ * - `onBookmarksChanged` / `onTrayOpenView`：订阅式，返回**取消订阅函数**（不是 Promise）。
  */
 import type { Bookmark, Folder, LinkStatus, Tag, Settings, VisitRecord } from './index'
 
@@ -187,6 +192,30 @@ export interface ElectronAPI {
   updateSettings: (settings: Partial<Settings>) => Promise<Settings>
   exportData: (format: 'json' | 'html') => Promise<ExportResult>
   importData: (format: 'json' | 'html', mergeMode: 'replace' | 'merge') => Promise<ImportResult>
+  /**
+   * `close-quick-add`：隐藏快速添加浮窗（**不销毁**）。
+   *
+   * 无返回值的语义是「请求已受理」，不代表窗口已经关闭（浮窗下次呼出仍是同一个渲染进程）。
+   */
+  closeQuickAdd: () => Promise<void>
+  /**
+   * `notify-bookmarks-changed`：让主进程向**除本窗口外**的所有窗口广播 `bookmarks-changed`。
+   *
+   * 快速添加浮窗保存成功后调用；主窗口收到广播后重新拉取书签列表。
+   */
+  notifyBookmarksChanged: () => Promise<void>
+  /**
+   * 订阅「书签数据已变更」广播。
+   *
+   * @returns 取消订阅函数 —— 组件卸载时必须调用（`ipcRenderer.on` 的监听不会随组件销毁自动移除）。
+   */
+  onBookmarksChanged: (listener: () => void) => () => void
+  /**
+   * 订阅托盘「统计 / 设置」请求。主进程只表达意图，实际切页由 `uiStore.setCurrentView` 完成。
+   *
+   * @returns 取消订阅函数（同上）。
+   */
+  onTrayOpenView: (listener: (view: 'stats' | 'settings') => void) => () => void
 }
 
 declare global {

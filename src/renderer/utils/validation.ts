@@ -27,8 +27,28 @@ const tryParseUrl = (value: string): URL | null => {
   }
 }
 
+/**
+ * 主机名是否可信。
+ *
+ * 必须单独判断的原因：Chromium 与 Node 对 `new URL()` 的宽容度不同 ——
+ * `new URL('https://not a url')` 在 Node 里抛错，但在 Chromium 里**成功**，
+ * 主机名被百分号编码成 `not%20a%20url`。只依赖 `new URL()` 会让
+ * 「带空格的假主机名」通过校验（实测能把 `not a url` 存成一条书签）。
+ *
+ * 规则：
+ * - 空主机名不可信；
+ * - 含 `%`（主机名里的百分号编码只可能来自非法字符）不可信；
+ * - 含空格/制表符等空白不可信；
+ * - 其余放行：国际化域名已被 `URL` 转成 punycode（`xn--…`），IPv6 形如 `[::1]`。
+ */
+export const isTrustworthyHostname = (hostname: string): boolean => {
+  if (!hostname) return false
+  if (hostname.includes('%')) return false
+  return !/\s/.test(hostname)
+}
+
 const isHttpUrl = (url: URL): boolean =>
-  HTTP_PROTOCOLS.includes(url.protocol) && Boolean(url.hostname)
+  HTTP_PROTOCOLS.includes(url.protocol) && isTrustworthyHostname(url.hostname)
 
 /**
  * 把用户输入的 URL 归一化成可直接存储/打开的形式。

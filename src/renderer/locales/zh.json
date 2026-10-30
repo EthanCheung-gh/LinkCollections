@@ -229,6 +229,15 @@
     "range90": "90 天",
     "noHistory": "暂无访问记录 —— 趋势将从今天起开始累积"
   },
+  "quickAdd": {
+    "title": "快速添加书签",
+    "urlPlaceholder": "粘贴或输入网址，回车保存",
+    "titlePlaceholder": "标题（可选）",
+    "invalidUrl": "请输入有效的 http/https 网址",
+    "saveFailed": "保存失败，请重试",
+    "save": "保存",
+    "cancel": "取消"
+  },
   "dialog": {
     "addBookmark": "添加书签",
     "editBookmark": "编辑书签",

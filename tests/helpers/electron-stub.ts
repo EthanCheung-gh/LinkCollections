@@ -34,7 +34,21 @@ export const electronStub = {
   shell: { openExternal: async () => undefined },
   BrowserWindow: class {},
   session: { defaultSession: { webRequest: { onHeadersReceived: () => undefined } } },
-  dialog: {}
+  dialog: {},
+  /**
+   * 托盘图标桩（`electron/tray-icon.ts`）。
+   *
+   * 语义与真实 NativeImage 对齐到「调用方唯一关心的那一点」：`isEmpty()`。
+   * 真实解码不做——单测断言的是「解码成功就用它、解码失败就降级」，不是 PNG 解码器。
+   */
+  nativeImage: {
+    createFromDataURL: (_dataUrl: string) => ({ isEmpty: () => false }),
+    createEmpty: () => ({ isEmpty: () => true })
+  },
+  /** 菜单桩（`electron/tray.ts`）：只回显模板，单测断言的是模板内容，不需要真实菜单对象 */
+  Menu: {
+    buildFromTemplate: (template: unknown) => ({ template })
+  }
 }
 
 /** 清空当前用例的 data 目录，返回其路径 */

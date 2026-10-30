@@ -68,9 +68,32 @@ const handleKeydown = (e: KeyboardEvent) => {
   focusHeaderSearch()
 }
 
+/**
+ * 主进程广播的取消订阅函数。
+ *
+ * `ipcRenderer.on` 的监听不会随 Vue 组件卸载自动移除：不保存句柄，热更新/重挂会叠加监听，
+ * 表现成「浮窗存一条书签，主窗口重复拉取 N 次」。
+ */
+let unsubscribeBookmarksChanged: (() => void) | null = null
+let unsubscribeTrayOpenView: (() => void) | null = null
+
 onMounted(() => {
   // C6：快捷键注册先于任何 await，且与数据加载解耦（uiStore.fetchSettings 失败也不会吞掉监听）
   window.addEventListener('keydown', handleKeydown)
+
+  // 快速添加浮窗保存成功后主进程会广播 → 主窗口重新拉取整份列表。
+  // 不用增量合并：浮窗写入的记录带上的是主进程生成的 id/默认字段，整份重拉最省心且不会出现
+  // 「本地数组与磁盘不一致」的幽灵条目（与 merge/restore 的处理方式一致）。
+  unsubscribeBookmarksChanged = window.electronAPI.onBookmarksChanged(() => {
+    bookmarkStore.fetchBookmarks().catch(error => {
+      console.error('Failed to refresh bookmarks after a quick add:', error)
+    })
+  })
+
+  // 托盘「统计 / 设置」：主进程已经负责显示/聚焦窗口，这里只切视图。
+  unsubscribeTrayOpenView = window.electronAPI.onTrayOpenView(view => {
+    uiStore.setCurrentView(view)
+  })
 
   // C6：4 次 IPC 并行发起；allSettled 不会因单个 reject 中断其余任务
   void Promise.allSettled([
@@ -89,6 +112,11 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+
+  unsubscribeBookmarksChanged?.()
+  unsubscribeBookmarksChanged = null
+  unsubscribeTrayOpenView?.()
+  unsubscribeTrayOpenView = null
 })
 </script>
 

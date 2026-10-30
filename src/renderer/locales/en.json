@@ -229,6 +229,15 @@
     "range90": "90 days",
     "noHistory": "No visit history yet — the trend starts recording from today onwards"
   },
+  "quickAdd": {
+    "title": "Quick Add Bookmark",
+    "urlPlaceholder": "Paste or type a URL, press Enter to save",
+    "titlePlaceholder": "Title (optional)",
+    "invalidUrl": "Please enter a valid http/https URL",
+    "saveFailed": "Failed to save, please try again",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
   "dialog": {
     "addBookmark": "Add Bookmark",
     "editBookmark": "Edit Bookmark",
