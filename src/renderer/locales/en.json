@@ -199,6 +199,25 @@
     "replaceMode": "Replace existing data",
     "mergeModeDesc": "Add to existing data"
   },
+  "browserImport": {
+    "title": "Import from Browser",
+    "entry": "Import from Browser",
+    "entryDesc": "Read Chrome, Edge, Brave or Chromium bookmarks directly — no HTML export needed",
+    "action": "Choose browser",
+    "intro": "Bookmark files found on this computer. Only Chromium-based browsers are supported (Chrome / Edge / Brave / Chromium).",
+    "detecting": "Looking for local browser bookmarks…",
+    "empty": "No browser bookmarks found",
+    "emptyHint": "Firefox and Safari store bookmarks in proprietary formats. Export them to HTML in the browser, then use the HTML import above.",
+    "profileLabel": "{browser} · {profile}",
+    "counts": "{bookmarks} bookmarks, {folders} folders",
+    "mergeMode": "Import mode",
+    "import": "Import",
+    "imported": "Imported {bookmarks} bookmark(s), skipped {skipped} duplicate(s)",
+    "failed": "Failed to import browser bookmarks",
+    "detectFailed": "Failed to look for browser bookmarks",
+    "replaceTitle": "Replace all data",
+    "replaceConfirm": "Replace mode deletes all existing bookmarks, folders, tags and visit history before importing. This cannot be undone. Continue?"
+  },
   "links": {
     "title": "Dead Link Check",
     "summary": "{ok} working, {broken} broken, {unknown} unknown",

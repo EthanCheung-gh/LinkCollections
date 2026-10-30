@@ -8,6 +8,7 @@ import { registerFolderHandlers } from './ipc/folders'
 import { registerTagHandlers } from './ipc/tags'
 import { registerSettingsHandlers, isAutoUpdateEnabled } from './ipc/settings'
 import { registerImportExportHandlers } from './ipc/import-export'
+import { registerBrowserImportHandlers } from './ipc/browser-import'
 import { registerLinkHandlers } from './ipc/links'
 import { runDataMigrations } from './utils/schema'
 import { createQuickAddController } from './quick-add'
@@ -463,6 +464,9 @@ function startApplication(): void {
     registerTagHandlers()
     registerSettingsHandlers()
     registerImportExportHandlers()
+    // 浏览器书签直读：依赖 import-export 的共享导入核心（applyImportedData），
+    // 放在它之后注册只是为了让「导入相关通道」在启动日志里保持相邻
+    registerBrowserImportHandlers()
     // 死链检查：只读写 bookmarks.json，不依赖其它 IPC 通道，放在最后注册
     registerLinkHandlers()
 

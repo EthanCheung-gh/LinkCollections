@@ -1,7 +1,7 @@
 /**
  * `window.electronAPI` 的类型契约。
  *
- * 必须与 `electron/preload.ts` 暴露的 35 + 5 = **40** 个方法**逐一对应**：
+ * 必须与 `electron/preload.ts` 暴露的 35 + 5 + 2 = **42** 个方法**逐一对应**：
  * openBrowser / getBookmarks / addBookmark / updateBookmark / deleteBookmark /
  * bulkUpdateBookmarks / bulkDeleteBookmarks / getDeletedBookmarks /
  * restoreBookmarks / purgeBookmarks / emptyTrash / mergeDuplicates / checkLinks /
@@ -10,7 +10,8 @@
  * deleteFolder / clearAllFolders / getTags / addTag / updateTag / deleteTag /
  * clearAllTags / getSettings / updateSettings / exportData / importData /
  * closeQuickAdd / notifyBookmarksChanged / onBookmarksChanged / onTrayOpenView /
- * getUpdateStatus / checkForUpdates / downloadUpdate / installUpdate / onUpdateStatus
+ * getUpdateStatus / checkForUpdates / downloadUpdate / installUpdate / onUpdateStatus /
+ * detectBrowserBookmarks / importBrowserBookmarks
  *
  * 返回值均以对应 `ipcMain.handle` 的实际返回值为准；失败时主进程 `throw`，
  * 渲染进程侧表现为 rejected Promise（不是 `{ success: false }`）。
@@ -23,6 +24,10 @@
  * - `onBookmarksChanged` / `onTrayOpenView`：订阅式，返回**取消订阅函数**（不是 Promise）。
  *
  * 最后 5 个是「自动更新」引入的（4 invoke + 1 订阅式）。
+ *
+ * 新增 2 个是「浏览器书签直读」引入的（均为 invoke，无订阅式）：
+ * - `detectBrowserBookmarks` / `importBrowserBookmarks`，返回体类型定义在
+ *   `electron/ipc/browser-import.ts`（主进程是唯一来源），这里转出。同样只能用 `import type`。
  */
 import type { Bookmark, Folder, LinkStatus, Tag, Settings, VisitRecord } from './index'
 import type {
@@ -31,6 +36,11 @@ import type {
   UpdateStatus,
   UpdateStatusSnapshot
 } from '../../../electron/updater'
+import type {
+  BrowserBookmarkCandidate,
+  BrowserBookmarkDetection,
+  BrowserBookmarkImportResult
+} from '../../../electron/ipc/browser-import'
 
 /**
  * 更新状态机与相关返回值的类型**定义在 `electron/updater.ts`**（单一来源：
@@ -46,6 +56,14 @@ export type { UpdaterActionResult, UpdateState, UpdateStatus, UpdateStatusSnapsh
  * 这里转出，便于 IPC 契约的消费方从同一个入口引用。
  */
 export type { LinkStatus }
+
+/**
+ * 浏览器书签直读的返回体（定义在 `electron/ipc/browser-import.ts`，这里转出）。
+ *
+ * `BrowserBookmarkCandidate.path` 只用于**展示**和原样回传；渲染层不得据此推导逻辑
+ * （主进程只接受本次探测白名单里的路径）。
+ */
+export type { BrowserBookmarkCandidate, BrowserBookmarkDetection, BrowserBookmarkImportResult }
 
 /**
  * `ipcMain.handle('check-links')` 的返回。
@@ -213,6 +231,24 @@ export interface ElectronAPI {
   updateSettings: (settings: Partial<Settings>) => Promise<Settings>
   exportData: (format: 'json' | 'html') => Promise<ExportResult>
   importData: (format: 'json' | 'html', mergeMode: 'replace' | 'merge') => Promise<ImportResult>
+  /**
+   * `detect-browser-bookmarks`：探测本机 Chromium 家族（Chrome / Edge / Brave / Chromium）
+   * 的书签文件。恒 resolve —— 没装某个浏览器、目录无权限、文件损坏都只是「少一个候选」。
+   *
+   * 只覆盖 Chromium：Firefox（`places.sqlite`）与 Safari（二进制 plist）
+   * 请让用户先「导出 HTML」再走 `importData('html', …)`。
+   */
+  detectBrowserBookmarks: () => Promise<BrowserBookmarkDetection>
+  /**
+   * `import-browser-bookmarks`：导入一个**本次探测到**的书签文件（`path` 原样回传自候选）。
+   *
+   * 主进程会拒绝不在探测白名单里的路径，并在读取前复核「是文件且 < 20MB」。
+   * `mergeMode` 省略/非法时按 `merge` 处理；返回体与 `importData` 一致。
+   */
+  importBrowserBookmarks: (request: {
+    path: string
+    mergeMode: 'replace' | 'merge'
+  }) => Promise<BrowserBookmarkImportResult>
   /**
    * `close-quick-add`：隐藏快速添加浮窗（**不销毁**）。
    *

@@ -1,8 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { UpdaterActionResult, UpdateStatus, UpdateStatusSnapshot } from './updater'
+import type {
+  BrowserBookmarkDetection,
+  BrowserBookmarkImportResult
+} from './ipc/browser-import'
 
 /**
- * IPC 通道总览（**31 → 35 → 40**，本文件与 `src/renderer/types/global.d.ts` 必须同步）：
+ * IPC 通道总览（**31 → 35 → 40 → 42**，本文件与 `src/renderer/types/global.d.ts` 必须同步）：
  *
  * - 原有 31 个 `invoke` 通道（书签 / 回收站 / 合并 / 死链 / 历史 / 文件夹 / 标签 / 设置 / 导入导出）；
  * - 新增 4 个「外壳」通道：
@@ -16,6 +20,9 @@ import type { UpdaterActionResult, UpdateStatus, UpdateStatusSnapshot } from './
  *   7. `download-update`（invoke）：下载已发现的新版本；
  *   8. `install-update`（invoke）：`quitAndInstall()`；
  *   9. `update-status`（main → renderer，订阅式）：主进程状态机广播。
+ * - 新增 2 个「浏览器书签直读」通道（40 → 42）：
+ *   10. `detect-browser-bookmarks`（invoke）：按平台探测本机 Chromium 家族书签文件；
+ *   11. `import-browser-bookmarks`（invoke）：导入其中一个**已探测到**的文件。
  *
  * 2/3 是同一个动作的两半（渲染层发起 → 主进程扇出），计通道时按两个算，
  * 因此从 31 变成 35 而不是 34；自动更新同理是 4 个 invoke + 1 个事件订阅 = 5，故为 40。
@@ -81,6 +88,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportData: (format: 'json' | 'html') => ipcRenderer.invoke('export-data', format),
   importData: (format: 'json' | 'html', mergeMode: 'replace' | 'merge') =>
     ipcRenderer.invoke('import-data', format, mergeMode),
+  /**
+   * 浏览器书签直读（Chromium 家族：Chrome / Edge / Brave / Chromium）。
+   *
+   * 两步：
+   *  1. `detect-browser-bookmarks`：主进程按平台扫描已知目录，永不 reject（没装某浏览器是常态），
+   *     返回 `{ success, candidates }`，每项带 `{ id, browser, profile, path, bookmarkCount, … }`；
+   *  2. `import-browser-bookmarks`：把用户选中的 `path` 回传。主进程只接受**本次探测过**的路径
+   *     （白名单），再解析、再走与 JSON/HTML 导入相同的共享写库核心。
+   *
+   * 路径的展示归展示、逻辑归逻辑：渲染层只把 `path` 原样回传，不据此做任何判断。
+   */
+  detectBrowserBookmarks: (): Promise<BrowserBookmarkDetection> =>
+    ipcRenderer.invoke('detect-browser-bookmarks'),
+  importBrowserBookmarks: (request: {
+    path: string
+    mergeMode: 'replace' | 'merge'
+  }): Promise<BrowserBookmarkImportResult> =>
+    ipcRenderer.invoke('import-browser-bookmarks', request),
   /**
    * 隐藏快速添加浮窗（`close-quick-add`）。
    *

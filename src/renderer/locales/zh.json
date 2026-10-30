@@ -199,6 +199,25 @@
     "replaceMode": "替换现有数据",
     "mergeModeDesc": "添加到现有数据"
   },
+  "browserImport": {
+    "title": "从浏览器导入",
+    "entry": "从浏览器导入",
+    "entryDesc": "直接读取 Chrome / Edge / Brave / Chromium 的书签，无需先导出 HTML",
+    "action": "选择浏览器",
+    "intro": "已在这台电脑上找到的书签文件。仅支持 Chromium 内核浏览器（Chrome / Edge / Brave / Chromium）。",
+    "detecting": "正在查找本机浏览器书签…",
+    "empty": "未找到可导入的浏览器书签",
+    "emptyHint": "Firefox 与 Safari 使用专有格式保存书签：请在浏览器里导出为 HTML，再用上方的 HTML 导入。",
+    "profileLabel": "{browser} · {profile}",
+    "counts": "{bookmarks} 条书签，{folders} 个文件夹",
+    "mergeMode": "导入模式",
+    "import": "导入",
+    "imported": "已导入 {bookmarks} 条书签，跳过 {skipped} 条重复",
+    "failed": "浏览器书签导入失败",
+    "detectFailed": "查找浏览器书签失败",
+    "replaceTitle": "替换全部数据",
+    "replaceConfirm": "替换模式会先清空现有的全部书签、文件夹、标签与访问历史再导入，且无法撤销。确定继续吗？"
+  },
   "links": {
     "title": "失效链接检查",
     "summary": "{ok} 个正常，{broken} 个失效，{unknown} 个无法确定",

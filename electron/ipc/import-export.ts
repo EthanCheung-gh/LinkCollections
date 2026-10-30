@@ -460,6 +460,272 @@ function parseNetscapeHtml(html: string): {
   return { folders, bookmarks }
 }
 
+/* ------------------------------------------------------------------ *
+ * 共享导入核心
+ *
+ * 三条导入路径（JSON 文件 / Netscape HTML / 浏览器书签文件）的差别只在
+ * 「怎么读文件、怎么解析成数据」；「把数据写进库」这一段——merge 去重、
+ * 文件夹/标签 id 重映射、写入事务与回滚——必须是**同一份实现**，否则
+ * 三条路径的去重口径、回滚行为迟早会漂移。
+ *
+ * 边界：本文件里的 handler 负责「读文件 + 解析 → ImportedDataSource」，
+ * 本函数负责「ImportedDataSource → 落盘 → 计数」。
+ * ------------------------------------------------------------------ */
+
+/** 导入源里的一条书签（字段全部可选：文件里的脏数据不一定齐全） */
+export interface ImportedBookmarkSource {
+  id?: string
+  url?: string
+  title?: string
+  description?: string
+  favicon?: string
+  color?: string
+  folderId?: string
+  tags?: string[]
+  visitCount?: number
+  lastVisited?: string | null
+  pinned?: boolean
+  createdAt?: string
+}
+
+/**
+ * 导入源里的一个文件夹。
+ *
+ * `id` 只在**本次导入内部**有意义（用于把书签的 `folderId` 重映射到新生成的 id）。
+ * `parentId` 指向同一批源文件夹里的另一个 `id`，且要求**父级先于子级出现**
+ * （HTML 解析与 Chromium 解析都天然满足），这样映射父级时它一定已处理过。
+ */
+export interface ImportedFolderSource {
+  id?: string
+  name?: string
+  icon?: string | null
+  color?: string
+  createdAt?: string
+  order?: number
+  parentId?: string | null
+}
+
+/** 导入源里的一个标签 */
+export interface ImportedTagSource {
+  id?: string
+  name?: string
+  color?: string
+  createdAt?: string
+}
+
+export interface ImportedDataSource {
+  bookmarks: Array<ImportedBookmarkSource | null | undefined>
+  folders: Array<ImportedFolderSource | null | undefined>
+  tags: Array<ImportedTagSource | null | undefined>
+}
+
+export interface ImportApplyOptions {
+  /** `true` = 合并进现有数据（按 `normalizeUrlKey` 去重）；`false` = 整库替换 */
+  merge: boolean
+  /**
+   * 是否保留源数据的文件夹层级（写入 `parentId`）。
+   *
+   * 为什么是个开关而不是一律保留：**行为一致性**。历史实现里 HTML 分支保留层级（C20），
+   * 而 JSON 分支从不写 `parentId`（JSON 里的 `parentId` 一直被忽略）。抽取公共核心时
+   * 必须让两条路径各自保持原样，否则「导出 JSON → 导入」的结果会和之前不同。
+   * - HTML 导入 / 浏览器导入：`true`；
+   * - JSON 导入：`false`（默认）。
+   */
+  preserveFolderHierarchy?: boolean
+}
+
+export interface ImportApplyResult {
+  imported: { bookmarks: number; folders: number; tags: number }
+  /** merge 模式下按 URL 去重时被跳过的条数 */
+  skipped: number
+}
+
+/**
+ * 把解析好的数据写进库（含 merge 去重、id 重映射、写入事务与回滚）。
+ *
+ * 返回结构与 `import-data` 的返回体保持一致（`{ imported, skipped }`），调用方只需
+ * 补上 `success` / `errors`。任何一步写盘失败都会回滚并**抛出**，由调用方转成错误返回。
+ */
+export function applyImportedData(
+  input: ImportedDataSource,
+  options: ImportApplyOptions
+): ImportApplyResult {
+  const merge = options.merge === true
+  const preserveFolderHierarchy = options.preserveFolderHierarchy === true
+
+  // 现有数据既用于 merge 去重，也作为失败回滚的还原快照
+  const previousBookmarks = getBookmarks()
+  const previousFolders = getFolders()
+  const previousTags = getTags()
+  const previousHistory = snapshotHistory()
+
+  const existingBookmarks = merge ? previousBookmarks : []
+  const existingFolders = merge ? previousFolders : []
+  // replace 模式的语义是「替换全部数据」：源数据不携带标签（HTML / 浏览器书签）时
+  // 必须显式清空标签库，否则会残留旧标签且新书签一条都不带标签（C21）。
+  const existingTags = merge ? previousTags : []
+
+  const now = new Date().toISOString()
+
+  const folderIdMap = new Map<string, string>()
+  const folderIdsByName = merge ? buildFolderNameIndex(existingFolders) : new Map<string, string>()
+  const importedFolders: Folder[] = []
+
+  const sourceFolders: Array<ImportedFolderSource | null | undefined> = Array.isArray(input.folders)
+    ? input.folders
+    : []
+
+  sourceFolders.forEach(sourceFolder => {
+    const folder = sourceFolder || {}
+    const name = typeof folder.name === 'string' ? folder.name : ''
+    const nameKey = normalizeNameKey(name)
+    const sourceId = typeof folder.id === 'string' ? folder.id : ''
+
+    // merge：同名文件夹视为同一个，复用已存在 id
+    const reusableId = merge && nameKey ? folderIdsByName.get(nameKey) : undefined
+    if (reusableId) {
+      if (sourceId) folderIdMap.set(sourceId, reusableId)
+      return
+    }
+
+    // 父级必须已经处理过（源数据按文档顺序、父先于子），否则降级为顶层
+    const parentSourceId = typeof folder.parentId === 'string' ? folder.parentId : ''
+    const parentId =
+      preserveFolderHierarchy && parentSourceId ? folderIdMap.get(parentSourceId) ?? null : null
+
+    const newId = uuidv4()
+    importedFolders.push({
+      id: newId,
+      name,
+      icon: folder.icon || null,
+      color: folder.color || DEFAULT_COLOR,
+      createdAt: folder.createdAt || now,
+      order: typeof folder.order === 'number' ? folder.order : importedFolders.length,
+      // JSON 分支历史上不写 parentId：不保留层级时不产生该键（保持原落盘形状）
+      ...(preserveFolderHierarchy ? { parentId } : {})
+    })
+
+    if (nameKey && !folderIdsByName.has(nameKey)) folderIdsByName.set(nameKey, newId)
+    if (sourceId) folderIdMap.set(sourceId, newId)
+  })
+
+  const tagIdMap = new Map<string, string>()
+  const tagIdsByName = merge ? buildTagNameIndex(existingTags) : new Map<string, string>()
+  const importedTags: Tag[] = []
+
+  const sourceTags: Array<ImportedTagSource | null | undefined> = Array.isArray(input.tags)
+    ? input.tags
+    : []
+
+  sourceTags.forEach(sourceTag => {
+    const tag = sourceTag || {}
+    const name = typeof tag.name === 'string' ? tag.name : ''
+    const nameKey = normalizeNameKey(name)
+    const sourceId = typeof tag.id === 'string' ? tag.id : ''
+
+    // merge：同名标签视为同一个，复用已存在 id
+    const reusableId = merge && nameKey ? tagIdsByName.get(nameKey) : undefined
+    if (reusableId) {
+      if (sourceId) tagIdMap.set(sourceId, reusableId)
+      return
+    }
+
+    const newId = uuidv4()
+    importedTags.push({
+      id: newId,
+      name,
+      color: tag.color || DEFAULT_COLOR,
+      createdAt: tag.createdAt || now
+    })
+
+    if (nameKey && !tagIdsByName.has(nameKey)) tagIdsByName.set(nameKey, newId)
+    if (sourceId) tagIdMap.set(sourceId, newId)
+  })
+
+  const seenUrls = merge ? buildUrlIndex(existingBookmarks) : new Set<string>()
+  let skippedBookmarks = 0
+  const importedBookmarks: Bookmark[] = []
+
+  const sourceBookmarks: Array<ImportedBookmarkSource | null | undefined> = Array.isArray(
+    input.bookmarks
+  )
+    ? input.bookmarks
+    : []
+
+  sourceBookmarks.forEach(sourceBookmark => {
+    const bookmark = sourceBookmark || {}
+    const url = typeof bookmark.url === 'string' ? bookmark.url : ''
+    const urlKey = merge ? normalizeUrlKey(url) : ''
+
+    // merge：按归一化 URL 去重，重复导入同一文件不会翻倍
+    if (urlKey && seenUrls.has(urlKey)) {
+      skippedBookmarks += 1
+      return
+    }
+    if (urlKey) seenUrls.add(urlKey)
+
+    const rawTags: unknown[] = Array.isArray(bookmark.tags) ? bookmark.tags : []
+
+    importedBookmarks.push({
+      id: uuidv4(),
+      url,
+      title: bookmark.title || url,
+      description: bookmark.description || '',
+      favicon: bookmark.favicon || '',
+      color: bookmark.color || DEFAULT_COLOR,
+      folderId: (typeof bookmark.folderId === 'string' && folderIdMap.get(bookmark.folderId)) || '',
+      tags: rawTags
+        .map(tagId => (typeof tagId === 'string' ? tagIdMap.get(tagId) || tagId : ''))
+        .filter(tagId => tagId !== ''),
+      // C22：沿用导入文件里的访问统计，「导出 → 导入」往返不再清零
+      visitCount: sanitizeVisitCount(bookmark.visitCount),
+      lastVisited: sanitizeLastVisited(bookmark.lastVisited),
+      // 置顶状态沿用导出文件：只认真布尔，脏值一律 false
+      pinned: bookmark.pinned === true,
+      createdAt: bookmark.createdAt || now,
+      updatedAt: now
+    })
+  })
+
+  const allFolders = [...existingFolders, ...importedFolders]
+  const allTags = [...existingTags, ...importedTags]
+  const allBookmarks = [...existingBookmarks, ...importedBookmarks]
+
+  writeAllOrRollback([
+    {
+      label: FOLDERS_FILE,
+      save: () => saveFolders(allFolders),
+      restore: () => saveFolders(previousFolders)
+    },
+    {
+      label: TAGS_FILE,
+      // replace：源数据没有标签时这里写入的就是空数组（真正清空）；merge：原样回写（no-op）
+      save: () => saveTags(allTags),
+      restore: () => saveTags(previousTags)
+    },
+    {
+      label: BOOKMARKS_FILE,
+      save: () => saveBookmarks(allBookmarks),
+      restore: () => saveBookmarks(previousBookmarks)
+    },
+    {
+      label: HISTORY_FILE,
+      // replace：旧书签被丢弃，历史随之清空；merge：保留原历史
+      save: () => (merge ? true : restoreHistory([])),
+      restore: () => restoreHistory(previousHistory)
+    }
+  ])
+
+  return {
+    imported: {
+      bookmarks: importedBookmarks.length,
+      folders: importedFolders.length,
+      tags: importedTags.length
+    },
+    skipped: skippedBookmarks
+  }
+}
+
 export function registerImportExportHandlers(): void {
   ipcMain.handle('export-data', async (_, format: 'json' | 'html') => {
     try {
@@ -558,285 +824,53 @@ export function registerImportExportHandlers(): void {
             throw new Error('Invalid JSON format: missing bookmarks array')
           }
 
-          // 现有数据既用于 merge 去重，也作为失败回滚的还原快照
-          const previousBookmarks = getBookmarks()
-          const previousFolders = getFolders()
-          const previousTags = getTags()
-          const previousHistory = snapshotHistory()
-
-          const existingBookmarks = merge ? previousBookmarks : []
-          const existingFolders = merge ? previousFolders : []
-          const existingTags = merge ? previousTags : []
-
-          const now = new Date().toISOString()
-
-          const folderIdMap = new Map<string, string>()
-          const folderIdsByName = merge ? buildFolderNameIndex(existingFolders) : new Map<string, string>()
-          const importedFolders: Folder[] = []
-
-          const sourceFolders: Array<Partial<Folder> | null | undefined> = Array.isArray(data.folders)
-            ? data.folders
-            : []
-
-          sourceFolders.forEach(sourceFolder => {
-            const folder = sourceFolder || {}
-            const name = typeof folder.name === 'string' ? folder.name : ''
-            const nameKey = normalizeNameKey(name)
-            const sourceId = typeof folder.id === 'string' ? folder.id : ''
-
-            // merge：同名文件夹视为同一个，复用已存在 id
-            const reusableId = nameKey ? folderIdsByName.get(nameKey) : undefined
-            if (merge && reusableId) {
-              if (sourceId) folderIdMap.set(sourceId, reusableId)
-              return
-            }
-
-            const newId = uuidv4()
-            importedFolders.push({
-              id: newId,
-              name,
-              icon: folder.icon || null,
-              color: folder.color || DEFAULT_COLOR,
-              createdAt: folder.createdAt || now,
-              order: typeof folder.order === 'number' ? folder.order : importedFolders.length
-            })
-
-            if (nameKey && !folderIdsByName.has(nameKey)) folderIdsByName.set(nameKey, newId)
-            if (sourceId) folderIdMap.set(sourceId, newId)
-          })
-
-          const tagIdMap = new Map<string, string>()
-          const tagIdsByName = merge ? buildTagNameIndex(existingTags) : new Map<string, string>()
-          const importedTags: Tag[] = []
-
-          const sourceTags: Array<Partial<Tag> | null | undefined> = Array.isArray(data.tags) ? data.tags : []
-
-          sourceTags.forEach(sourceTag => {
-            const tag = sourceTag || {}
-            const name = typeof tag.name === 'string' ? tag.name : ''
-            const nameKey = normalizeNameKey(name)
-            const sourceId = typeof tag.id === 'string' ? tag.id : ''
-
-            // merge：同名标签视为同一个，复用已存在 id
-            const reusableId = nameKey ? tagIdsByName.get(nameKey) : undefined
-            if (merge && reusableId) {
-              if (sourceId) tagIdMap.set(sourceId, reusableId)
-              return
-            }
-
-            const newId = uuidv4()
-            importedTags.push({
-              id: newId,
-              name,
-              color: tag.color || DEFAULT_COLOR,
-              createdAt: tag.createdAt || now
-            })
-
-            if (nameKey && !tagIdsByName.has(nameKey)) tagIdsByName.set(nameKey, newId)
-            if (sourceId) tagIdMap.set(sourceId, newId)
-          })
-
-          const seenUrls = merge ? buildUrlIndex(existingBookmarks) : new Set<string>()
-          let skippedBookmarks = 0
-          const importedBookmarks: Bookmark[] = []
-
-          const sourceBookmarks: Array<Partial<Bookmark> | null | undefined> = data.bookmarks
-
-          sourceBookmarks.forEach(sourceBookmark => {
-            const bookmark = sourceBookmark || {}
-            const url = typeof bookmark.url === 'string' ? bookmark.url : ''
-            const urlKey = merge ? normalizeUrlKey(url) : ''
-
-            // merge：按归一化 URL 去重，重复导入同一文件不会翻倍
-            if (urlKey && seenUrls.has(urlKey)) {
-              skippedBookmarks += 1
-              return
-            }
-            if (urlKey) seenUrls.add(urlKey)
-
-            const rawTags: unknown[] = Array.isArray(bookmark.tags) ? bookmark.tags : []
-
-            importedBookmarks.push({
-              id: uuidv4(),
-              url,
-              title: bookmark.title || url,
-              description: bookmark.description || '',
-              favicon: bookmark.favicon || '',
-              color: bookmark.color || DEFAULT_COLOR,
-              folderId: (typeof bookmark.folderId === 'string' && folderIdMap.get(bookmark.folderId)) || '',
-              tags: rawTags
-                .map(tagId => (typeof tagId === 'string' ? tagIdMap.get(tagId) || tagId : ''))
-                .filter(tagId => tagId !== ''),
-              // C22：沿用导入文件里的访问统计，「导出 → 导入」往返不再清零
-              visitCount: sanitizeVisitCount(bookmark.visitCount),
-              lastVisited: sanitizeLastVisited(bookmark.lastVisited),
-              // 置顶状态沿用导出文件：只认真布尔，脏值一律 false
-              pinned: bookmark.pinned === true,
-              createdAt: bookmark.createdAt || now,
-              updatedAt: now
-            })
-          })
-
-          const allFolders = [...existingFolders, ...importedFolders]
-          const allTags = [...existingTags, ...importedTags]
-          const allBookmarks = [...existingBookmarks, ...importedBookmarks]
-
-          writeAllOrRollback([
+          // 读文件 + 解析留在 handler；写库（去重 / id 重映射 / 事务回滚）统一走共享核心
+          const { imported, skipped } = applyImportedData(
             {
-              label: FOLDERS_FILE,
-              save: () => saveFolders(allFolders),
-              restore: () => saveFolders(previousFolders)
+              bookmarks: data.bookmarks,
+              folders: Array.isArray(data.folders) ? data.folders : [],
+              tags: Array.isArray(data.tags) ? data.tags : []
             },
-            {
-              label: TAGS_FILE,
-              save: () => saveTags(allTags),
-              restore: () => saveTags(previousTags)
-            },
-            {
-              label: BOOKMARKS_FILE,
-              save: () => saveBookmarks(allBookmarks),
-              restore: () => saveBookmarks(previousBookmarks)
-            },
-            {
-              label: HISTORY_FILE,
-              // replace：旧书签被丢弃，历史随之清空；merge：保留原历史
-              save: () => (merge ? true : restoreHistory([])),
-              restore: () => restoreHistory(previousHistory)
-            }
-          ])
+            // 历史行为：JSON 导入从不写 folder.parentId（层级只在 HTML / 浏览器导入时保留）
+            { merge }
+          )
 
-          return {
-            success: true,
-            imported: {
-              bookmarks: importedBookmarks.length,
-              folders: importedFolders.length,
-              tags: importedTags.length
-            },
-            skipped: skippedBookmarks,
-            errors: [] as string[]
-          }
+          return { success: true, imported, skipped, errors: [] as string[] }
         }
 
         const { folders, bookmarks } = parseNetscapeHtml(content)
 
-        // 现有数据既用于 merge 去重，也作为失败回滚的还原快照
-        const previousBookmarks = getBookmarks()
-        const previousFolders = getFolders()
-        const previousTags = getTags()
-        const previousHistory = snapshotHistory()
-
-        const existingBookmarks = merge ? previousBookmarks : []
-        const existingFolders = merge ? previousFolders : []
-        // C21：replace 模式语义是「替换全部数据」，Netscape 格式本身不携带标签，
-        // 因此必须显式清空标签库，否则会残留旧标签且新书签一条都不带标签。
-        const existingTags = merge ? previousTags : []
-
-        const now = new Date().toISOString()
-
-        const folderIdMap = new Map<string, string>()
-        const folderIdsByName = merge ? buildFolderNameIndex(existingFolders) : new Map<string, string>()
-        const importedFolders: Folder[] = []
-
+        // Netscape 解析结果 → 共享核心的通用数据形状。
         // Map 的插入顺序即文档顺序（父目录总是先于子目录出现），
-        // 因此映射 parentId 时父级一定已经处理过（C20）。
-        folders.forEach((node, parsedFolderId) => {
-          const nameKey = normalizeNameKey(node.name)
-          const parentId = node.parentId ? folderIdMap.get(node.parentId) ?? null : null
-
-          // merge：同名文件夹复用已存在 id，并重写书签里的 folderId 引用
-          const reusableId = merge && nameKey ? folderIdsByName.get(nameKey) : undefined
-          if (reusableId) {
-            folderIdMap.set(parsedFolderId, reusableId)
-            return
-          }
-
-          const newId = uuidv4()
-          importedFolders.push({
-            id: newId,
-            name: node.name,
-            icon: null,
-            color: DEFAULT_COLOR,
-            createdAt: now,
-            order: importedFolders.length,
-            // C20：保留层级，使「导出 → 导入 → 再导出」不再把嵌套结构压平
-            parentId
-          })
-
-          if (nameKey && !folderIdsByName.has(nameKey)) folderIdsByName.set(nameKey, newId)
-          folderIdMap.set(parsedFolderId, newId)
-        })
-
-        const seenUrls = merge ? buildUrlIndex(existingBookmarks) : new Set<string>()
-        let skippedBookmarks = 0
-        const importedBookmarks: Bookmark[] = []
-
-        bookmarks.forEach(parsedBookmark => {
-          const url = parsedBookmark.url
-          const urlKey = merge ? normalizeUrlKey(url) : ''
-
-          if (urlKey && seenUrls.has(urlKey)) {
-            skippedBookmarks += 1
-            return
-          }
-          if (urlKey) seenUrls.add(urlKey)
-
-          importedBookmarks.push({
-            id: uuidv4(),
-            url,
-            title: parsedBookmark.title || url,
-            // C20：<DD> 里的描述现在会被解析出来
-            description: parsedBookmark.description || '',
-            favicon: '',
-            color: DEFAULT_COLOR,
-            folderId: folderIdMap.get(parsedBookmark.folderId) || '',
-            tags: [],
-            // Netscape 书签格式不携带访问次数/最近访问时间，这里只能降级为初始值（不是缺陷）
-            visitCount: 0,
-            lastVisited: null,
-            // Netscape 书签格式同样不携带「置顶」状态，导入后一律视为未置顶
-            pinned: false,
-            createdAt: now,
-            updatedAt: now
-          })
-        })
-
-        const allFolders = [...existingFolders, ...importedFolders]
-        const allBookmarks = [...existingBookmarks, ...importedBookmarks]
-
-        writeAllOrRollback([
+        // 因此核心映射 parentId 时父级一定已经处理过（C20）。
+        const { imported, skipped } = applyImportedData(
           {
-            label: FOLDERS_FILE,
-            save: () => saveFolders(allFolders),
-            restore: () => saveFolders(previousFolders)
+            bookmarks: bookmarks.map(parsedBookmark => ({
+              url: parsedBookmark.url,
+              title: parsedBookmark.title,
+              // C20：<DD> 里的描述现在会被解析出来
+              description: parsedBookmark.description,
+              folderId: parsedBookmark.folderId,
+              tags: [],
+              // Netscape 格式不携带访问次数/最近访问时间/置顶状态，只能降级为初始值（不是缺陷）
+              visitCount: 0,
+              lastVisited: null,
+              pinned: false
+            })),
+            folders: [...folders].map(([parsedFolderId, node]) => ({
+              id: parsedFolderId,
+              name: node.name,
+              // C20：保留层级，使「导出 → 导入 → 再导出」不再把嵌套结构压平
+              parentId: node.parentId
+            })),
+            // C21：Netscape 格式不携带标签。replace 时核心会用空标签库覆盖，
+            // merge 时则原样回写既有标签（`existingTags` 即 `previousTags`）。
+            tags: []
           },
-          {
-            label: TAGS_FILE,
-            // C21：replace 模式写入空标签库（真正清空）；merge 模式是原样回写（no-op）
-            save: () => saveTags(existingTags),
-            restore: () => saveTags(previousTags)
-          },
-          {
-            label: BOOKMARKS_FILE,
-            save: () => saveBookmarks(allBookmarks),
-            restore: () => saveBookmarks(previousBookmarks)
-          },
-          {
-            label: HISTORY_FILE,
-            save: () => (merge ? true : restoreHistory([])),
-            restore: () => restoreHistory(previousHistory)
-          }
-        ])
+          { merge, preserveFolderHierarchy: true }
+        )
 
-        return {
-          success: true,
-          imported: {
-            bookmarks: importedBookmarks.length,
-            folders: importedFolders.length,
-            tags: 0
-          },
-          skipped: skippedBookmarks,
-          errors: [] as string[]
-        }
+        return { success: true, imported, skipped, errors: [] as string[] }
       } catch (error) {
         console.error('Import error:', error)
         const message = toErrorMessage(error)

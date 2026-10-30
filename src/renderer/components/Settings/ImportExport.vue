@@ -63,6 +63,29 @@
       </div>
     </div>
 
+    <!--
+      「从浏览器导入」挂在导入/导出区块（而不是 SettingsView）：
+      它是导入的一种**来源**，结果提示、merge/replace 语义、store 刷新都与上面的
+      JSON/HTML 导入完全一致；放在同一个组件里，「导入」这件事只有一处入口。
+    -->
+    <div class="browser-import-row">
+      <div class="browser-import-content">
+        <div class="browser-import-label">
+          {{ t('browserImport.entry') }}
+        </div>
+        <div class="browser-import-desc">
+          {{ t('browserImport.entryDesc') }}
+        </div>
+      </div>
+      <el-button
+        type="primary"
+        plain
+        @click="browserImportVisible = true"
+      >
+        {{ t('browserImport.action') }}
+      </el-button>
+    </div>
+
     <el-alert
       v-if="lastImportResult"
       class="import-alert"
@@ -71,6 +94,8 @@
       :closable="false"
       show-icon
     />
+
+    <BrowserImportDialog v-model="browserImportVisible" />
   </div>
 </template>
 
@@ -80,6 +105,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { useBookmarkStore, useFolderStore, useTagStore } from '../../stores'
 import type { ImportResult } from '../../types/import-export'
+import BrowserImportDialog from './BrowserImportDialog.vue'
 
 const { t } = useI18n()
 const bookmarkStore = useBookmarkStore()
@@ -94,6 +120,9 @@ const importingJson = ref(false)
 const importingHtml = ref(false)
 
 const lastImportResult = ref<ImportResult | null>(null)
+
+/** 「从浏览器导入」弹窗开关（探测与导入都在弹窗内完成） */
+const browserImportVisible = ref(false)
 
 const handleExportJson = async () => {
   try {
@@ -269,5 +298,35 @@ const handleImportHtml = async () => {
 
 .import-alert {
   margin-top: var(--lc-space-4);
+}
+
+/* 「从浏览器导入」：一行入口（左说明 + 右按钮），与上方的卡片网格层级区分开 */
+.browser-import-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lc-space-4);
+  min-width: 0;
+  margin-top: var(--lc-space-4);
+  padding: var(--lc-space-4);
+  background-color: var(--lc-bg-subtle);
+  border: 1px solid var(--lc-border-subtle);
+  border-radius: var(--lc-radius-md);
+}
+
+.browser-import-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.browser-import-label {
+  margin-bottom: var(--lc-space-1);
+  font-size: var(--lc-font-base);
+  font-weight: var(--lc-weight-medium);
+  color: var(--lc-text-primary);
+}
+
+.browser-import-desc {
+  font-size: var(--lc-font-sm);
+  color: var(--lc-text-muted);
 }
 </style>

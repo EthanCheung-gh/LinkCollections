@@ -56,6 +56,8 @@
   超过 30 天（启动时）自动清理。单条删除、批量删除、重复合并丢弃的副本都走同一套软删除
 - **重复书签合并** - 按归一化 URL 找出指向同一地址的书签，预览后一次合并：保留访问最多/已置顶的一条，
   标签取并集、访问次数求和、最近访问取最新，其余副本删除（http 与 https、不同 query 视为不同书签，避免误合并）
+- **从浏览器直读导入** - 自动探测本机 Chrome / Edge / Brave / Chromium 的 `Bookmarks` 文件（含多 profile），
+  无需先导出 HTML；按归一化 URL 去重、同名文件夹复用，可选合并或替换
 - **失效链接检查** - 一键批量探测全部书签（HEAD 优先、失败回退 GET，并发 4、单请求 8s 超时），
   结果分为「正常 / 失效 / 无法确定」三类并写入书签；可一键删除确认失效的链接
 - **清空与重置** - 一键清空数据或恢复默认设置
@@ -275,6 +277,7 @@ LinkCollections/
 │       ├── tags.ts               # 标签 CRUD
 │       ├── history.ts            # 访问历史（90 天 / 5000 条上限）
 │       ├── links.ts              # 失效链接检查（HEAD→GET、并发 4、8s 超时）
+│       ├── browser-import.ts      # 浏览器书签直读（探测 + 路径白名单）
 │       ├── settings.ts           # 设置、打开浏览器（协议/路径白名单）
 │       └── import-export.ts      # JSON / Netscape HTML 导入导出（去重、回滚）
 ├── src/renderer/                 # 渲染进程
@@ -297,6 +300,11 @@ LinkCollections/
 │   ├── utils/                    # highlight（转义高亮）、validation、favicon
 │   ├── locales/                  # en.json / zh.json
 │   └── types/                    # 渲染层类型与 electronAPI 契约
+├── shared/                      # 主进程与渲染层共用的纯逻辑
+│   ├── url-key.ts               # URL 归一化（导入去重键）
+│   ├── duplicates.ts            # 重复书签合并计划
+│   ├── chromium-bookmarks.ts    # Chromium Bookmarks JSON 解析
+│   └── view-route.ts            # 主窗口 / 快速添加视图判定
 ├── tests/                       # vitest 单元测试（工具函数 / store / 主进程纯逻辑）
 ├── screenshots/                  # README 截图
 ├── electron.vite.config.ts        # 主进程/预加载/渲染进程构建 + CSP meta 注入
@@ -345,13 +353,13 @@ LinkCollections/
 - 回收站（软删除、恢复、永久删除、30 天过期清理）
 - 系统托盘、全局快捷键与快速添加浮窗（含自绘应用图标）
 - 自动更新（electron-updater：静默检查、手动下载、重启安装）
+- 浏览器书签直读导入（Chromium 家族，含多 profile 探测）
 - 最小单元测试基建（vitest，覆盖工具函数、store 纯逻辑、主进程迁移与保留策略）
 - 安全加固：渲染进程沙箱、严格 CSP、外链与写入白名单、XSS 转义
 
 ### 📋 计划中
 
 - [ ] E2E 测试（组件渲染与 Electron 窗口行为）
-- [ ] 浏览器书签文件直读导入
 - [ ] 云端同步与浏览器插件
 
 ---
