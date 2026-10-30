@@ -1,9 +1,9 @@
 /**
  * `window.electronAPI` 的类型契约。
  *
- * 必须与 `electron/preload.ts` 暴露的 26 个方法**逐一对应**：
+ * 必须与 `electron/preload.ts` 暴露的 27 个方法**逐一对应**：
  * openBrowser / getBookmarks / addBookmark / updateBookmark / deleteBookmark /
- * bulkUpdateBookmarks / bulkDeleteBookmarks / checkLinks /
+ * bulkUpdateBookmarks / bulkDeleteBookmarks / mergeDuplicates / checkLinks /
  * incrementVisitCount / clearAllBookmarks / getVisitHistory / clearVisitHistory /
  * getFolders / addFolder / updateFolder /
  * deleteFolder / clearAllFolders / getTags / addTag / updateTag / deleteTag /
@@ -84,6 +84,18 @@ export interface BulkDeleteBookmarksResult {
   missing: string[]
 }
 
+/**
+ * `merge-duplicates` 的返回：合并的组数 + 删除的条数 + **合并后的完整列表**。
+ *
+ * `bookmarks` 是全量快照，渲染层据此整体替换本地数组（比按 id 增量合并更可靠：
+ * donors 消失、keeper 字段被改写，两者一次到位）。
+ */
+export interface MergeDuplicatesResult {
+  groups: number
+  removed: number
+  bookmarks: Bookmark[]
+}
+
 export interface ElectronAPI {
   /** `open-browser`：失败可能 reject（主进程校验/启动失败）。 */
   openBrowser: (url: string, browserPath?: string) => Promise<void>
@@ -101,6 +113,11 @@ export interface ElectronAPI {
   ) => Promise<BulkUpdateBookmarksResult>
   /** `bulk-delete-bookmarks`：`deleted` 为实际删除条数，`missing` 为未找到的 id。 */
   bulkDeleteBookmarks: (ids: string[]) => Promise<BulkDeleteBookmarksResult>
+  /**
+   * `merge-duplicates`：合并重复书签（一次 IPC = 主进程一次读 + 一次写）。
+   * 无重复时主进程不写盘，直接返回 `{ groups: 0, removed: 0, bookmarks }`。
+   */
+  mergeDuplicates: () => Promise<MergeDuplicatesResult>
   /**
    * `check-links`：死链检查。省略 `ids` = 检查全部书签。
    * 主进程一次读盘 + 一次写盘并返回汇总；目标为空时返回全 0 且不写盘。

@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('bulk-update-bookmarks', ids, patch),
   bulkDeleteBookmarks: (ids: string[]) => ipcRenderer.invoke('bulk-delete-bookmarks', ids),
   /**
+   * 重复书签合并：一次 IPC = 主进程一次读 + 一次写。
+   * 返回 `{ groups, removed, bookmarks }`，`bookmarks` 是合并后的**完整列表**，
+   * 渲染层整体替换本地数组即可（donors 已被删除，keeper 字段已合并）。
+   */
+  mergeDuplicates: () => ipcRenderer.invoke('merge-duplicates'),
+  /**
    * 死链检查：省略 `ids` = 检查全部书签。
    * 主进程侧一次读盘 + 一次写盘，返回汇总与本次检查过的书签（已带新 `linkStatus`）。
    * 同一时刻只允许一轮检查在跑（主进程有闸门，UI 也会禁用按钮）。

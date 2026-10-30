@@ -154,7 +154,10 @@
     "additionalBrowsers": "Additional browsers to choose from",
     "checkLinks": "Check Dead Links",
     "checkLinksDesc": "Verify that every bookmark still opens (HTTP HEAD, falling back to GET)",
-    "checkingLinks": "Checking..."
+    "checkingLinks": "Checking...",
+    "mergeDuplicates": "Merge Duplicate Bookmarks",
+    "mergeDuplicatesDesc": "Find bookmarks that point to the same URL and combine them into one",
+    "mergeDuplicatesAction": "Preview & Merge"
   },
   "importExport": {
     "title": "Import / Export",
@@ -183,6 +186,16 @@
     "deleteBroken": "Delete broken bookmarks",
     "statusCode": "HTTP {status}",
     "unknownReason": "Reason unknown"
+  },
+  "duplicates": {
+    "title": "Merge Duplicate Bookmarks",
+    "summary": "{groups} duplicate groups, {redundant} bookmarks will be removed",
+    "keep": "Keep",
+    "remove": "Remove",
+    "more": "{count} more",
+    "none": "No duplicate bookmarks found",
+    "merge": "Merge",
+    "confirm": "Merge {count} duplicate bookmarks? The extra copies will be deleted and this cannot be undone."
   },
   "stats": {
     "title": "Statistics",
@@ -281,6 +294,8 @@
     "bulkUpdated": "{count} bookmarks updated",
     "bulkDeleted": "{count} bookmarks deleted",
     "historyLoadFailed": "Failed to load visit history",
-    "linkCheckFailed": "Failed to check links"
+    "linkCheckFailed": "Failed to check links",
+    "duplicatesMerged": "{count} duplicate bookmarks merged",
+    "mergeDuplicatesFailed": "Failed to merge duplicate bookmarks"
   }
 }

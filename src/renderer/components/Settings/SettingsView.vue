@@ -235,6 +235,23 @@
         <div class="settings-item">
           <div class="settings-item-content">
             <div class="settings-item-label">
+              {{ t('settings.mergeDuplicates') }}
+            </div>
+            <div class="settings-item-description">
+              {{ t('settings.mergeDuplicatesDesc') }}
+            </div>
+          </div>
+          <el-button
+            type="primary"
+            plain
+            @click="openMergeDuplicates"
+          >
+            {{ t('settings.mergeDuplicatesAction') }}
+          </el-button>
+        </div>
+        <div class="settings-item">
+          <div class="settings-item-content">
+            <div class="settings-item-label">
               {{ t('settings.clearAllData') }}
             </div>
             <div class="settings-item-description">
@@ -260,6 +277,10 @@
     </div>
 
     <LinkCheckDialog v-model="linkCheckVisible" :result="linkCheckResult" />
+    <MergeDuplicatesDialog
+      v-model="mergeDuplicatesVisible"
+      :plan="mergeDuplicatesPlan"
+    />
   </div>
 </template>
 
@@ -273,6 +294,8 @@ import type { Settings } from '../../types'
 import type { LinkCheckResult } from '../../types/global'
 import ImportExport from './ImportExport.vue'
 import LinkCheckDialog from './LinkCheckDialog.vue'
+import MergeDuplicatesDialog from './MergeDuplicatesDialog.vue'
+import { planDuplicateMerges, type DuplicateMergePlan } from '../../../../shared/duplicates'
 import { DEFAULT_FAVICON_SERVICES } from '../../utils/favicon'
 import { THEME_COLORS } from '../../types/settings'
 
@@ -308,6 +331,18 @@ const defaultBrowserPath = ref('')
 const checkingLinks = ref(false)
 const linkCheckVisible = ref(false)
 const linkCheckResult = ref<LinkCheckResult | null>(null)
+
+/**
+ * 重复书签合并：预览在**本地**用共享纯函数算好再开弹窗（不写盘、不走 IPC），
+ * 用户因此能先看到「哪些组、保留哪条、将删除几条」再决定是否执行。
+ */
+const mergeDuplicatesVisible = ref(false)
+const mergeDuplicatesPlan = ref<DuplicateMergePlan | null>(null)
+
+const openMergeDuplicates = () => {
+  mergeDuplicatesPlan.value = planDuplicateMerges(bookmarkStore.bookmarks, new Date())
+  mergeDuplicatesVisible.value = true
+}
 
 const themeColors = THEME_COLORS
 

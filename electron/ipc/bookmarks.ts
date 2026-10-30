@@ -4,6 +4,8 @@ import { readJsonFile, writeJsonFile } from '../utils/storage'
 // 访问历史与书签写在两个文件里：这里**直接调用函数**而不是走 IPC，
 // 避免主进程自己 invoke 自己的通道（多一层序列化，且错误语义会被 wrap 成字符串）。
 import { appendVisit, clearHistory, removeBookmarkHistory, removeBookmarksHistory } from './history'
+// 重复书签合并的「计划」是纯函数，主进程与渲染层共用同一份（含 URL 归一化规则）
+import { planDuplicateMerges } from '../../shared/duplicates'
 
 interface Bookmark {
   id: string
@@ -97,6 +99,13 @@ export interface BulkDeleteResult {
   missing: string[]
 }
 
+/** `merge-duplicates` 的返回：合并的组数 + 删除条数 + 合并后的完整列表。 */
+export interface MergeDuplicatesResult {
+  groups: number
+  removed: number
+  bookmarks: Bookmark[]
+}
+
 /** 归一化后的补丁：可空字段用于「未提供」，标签数组恒为去重后的字符串数组 */
 interface NormalizedBulkPatch {
   folderId?: string
@@ -123,6 +132,40 @@ function dedupeStrings(value: unknown): string[] {
 /** 与 {@link dedupeStrings} 相同，语义上专用于 id 列表（批量通道的第一步） */
 function dedupeIds(value: unknown): string[] {
   return dedupeStrings(value)
+}
+
+/** {@link filterBookmarksByIds} 的返回：剩余记录 + 实际删除条数 + 未找到的 id。 */
+export interface FilterBookmarksResult<T> {
+  remaining: T[]
+  deleted: number
+  missing: string[]
+}
+
+/**
+ * 「按 id 集合过滤」的**唯一**实现 —— `bulk-delete-bookmarks` 与 `merge-duplicates` 共用。
+ *
+ * 纯函数：不读写盘、不改入参（`remaining` 是新数组，元素仍是原引用）。
+ * `missing` 只收集「请求了但数据里不存在」的 id（按 `ids` 的首次出现顺序），不视为错误。
+ * 重复的 id 先按首次出现去重，因此 `deleted` 统计的是**实际被移除的记录条数**。
+ */
+export function filterBookmarksByIds<T extends { id: string }>(
+  bookmarks: readonly T[],
+  ids: readonly string[]
+): FilterBookmarksResult<T> {
+  const list = Array.isArray(bookmarks) ? bookmarks : []
+  const uniqueIds = dedupeStrings(ids)
+
+  if (uniqueIds.length === 0) {
+    return { remaining: [...list], deleted: 0, missing: [] }
+  }
+
+  const requested = new Set(uniqueIds)
+  const existingIds = new Set(list.map(bookmark => bookmark.id))
+
+  const missing = uniqueIds.filter(id => !existingIds.has(id))
+  const remaining = list.filter(bookmark => !requested.has(bookmark.id))
+
+  return { remaining, deleted: list.length - remaining.length, missing }
 }
 
 /**
@@ -410,6 +453,9 @@ export function registerBookmarkHandlers(): void {
   /**
    * 批量删除：**一次读 + 一次写**。
    * `deleted` 是实际删除条数（不含不存在的 id），`missing` 收集未找到的 id。
+   *
+   * 「按 id 集合过滤」的逻辑已抽成纯函数 {@link filterBookmarksByIds}（与
+   * `merge-duplicates` 共用），本通道只负责读盘、写盘与历史清理的编排。
    */
   ipcMain.handle('bulk-delete-bookmarks', (_, ids: string[]): BulkDeleteResult => {
     const uniqueIds = dedupeIds(ids)
@@ -419,12 +465,7 @@ export function registerBookmarkHandlers(): void {
 
     // ---- 唯一一次读盘 ----
     const bookmarks = getBookmarks()
-    const requested = new Set(uniqueIds)
-    const existingIds = new Set(bookmarks.map(bookmark => bookmark.id))
-
-    const missing = uniqueIds.filter(id => !existingIds.has(id))
-    const remaining = bookmarks.filter(bookmark => !requested.has(bookmark.id))
-    const deleted = bookmarks.length - remaining.length
+    const { remaining, deleted, missing } = filterBookmarksByIds(bookmarks, uniqueIds)
 
     if (deleted === 0) {
       return { deleted: 0, missing }
@@ -438,11 +479,66 @@ export function registerBookmarkHandlers(): void {
     // 清理这些书签的访问历史（一次读写），否则趋势图会继续统计已删除的书签。
     // 历史清理失败不应让批量删除整体失败。
     try {
-      removeBookmarksHistory([...requested])
+      removeBookmarksHistory(uniqueIds)
     } catch (error) {
       console.error('[bookmarks] Failed to clean visit history after bulk delete:', error)
     }
 
     return { deleted, missing }
+  })
+
+  /**
+   * 重复书签合并：**一次读 + 一次写**。
+   *
+   * 计划由 `shared/duplicates.ts` 的纯函数算出（与渲染层预览用的是同一份逻辑），
+   * 本通道只做三件事：
+   *  1. 唯一一次读盘；
+   *  2. 把每个 keeper 的合并字段写回它的位置，并丢弃 donors —— 删除 donors 复用
+   *     {@link filterBookmarksByIds}（filter 保序，因此 **keeper 位置与其余记录顺序都不变**）；
+   *  3. 唯一一次写盘。
+   *
+   * 无重复时不写盘（返回原列表），避免一次无意义的整文件重写。
+   * 写盘失败统一抛 `Failed to merge duplicate bookmarks`；donors 的访问历史清理
+   * 失败只记日志 —— 合并已经落盘，不能反过来报「合并失败」。
+   */
+  ipcMain.handle('merge-duplicates', (): MergeDuplicatesResult => {
+    // ---- 唯一一次读盘 ----
+    const bookmarks = getBookmarks()
+    const plan = planDuplicateMerges(bookmarks, new Date())
+
+    if (plan.duplicateGroups === 0) {
+      return { groups: 0, removed: 0, bookmarks }
+    }
+
+    const fieldsById = new Map(plan.keepers.map(keeper => [keeper.id, keeper.fields]))
+
+    // 复用 {@link filterBookmarksByIds}（与 `bulk-delete-bookmarks` 同一实现）丢掉 donors：
+    // filter 保序，因此其余记录（含每个 keeper 的原下标）顺序不变；
+    // 再把合并后的字段写回 keeper 自己。
+    const { remaining } = filterBookmarksByIds(bookmarks, plan.donorIds)
+    const merged: Bookmark[] = remaining.map(bookmark => {
+      const fields = fieldsById.get(bookmark.id)
+      return fields ? { ...bookmark, ...fields } : bookmark
+    })
+
+    // ---- 唯一一次写盘 ----
+    try {
+      if (!saveBookmarks(merged)) {
+        throw new Error('saveBookmarks returned false')
+      }
+    } catch (error) {
+      console.error('[bookmarks] Failed to merge duplicate bookmarks:', error)
+      throw new Error('Failed to merge duplicate bookmarks')
+    }
+
+    // donors 已被合并掉：清掉它们的逐次访问历史，避免趋势图继续统计不存在的书签。
+    // 历史清理失败只记日志，不影响合并结果（书签已经合并并落盘）。
+    try {
+      removeBookmarksHistory(plan.donorIds)
+    } catch (error) {
+      console.error('[bookmarks] Failed to clean visit history after merging duplicates:', error)
+    }
+
+    return { groups: plan.duplicateGroups, removed: plan.donorIds.length, bookmarks: merged }
   })
 }

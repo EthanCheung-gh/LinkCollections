@@ -252,6 +252,34 @@ export const useBookmarkStore = defineStore('bookmark', () => {
     }
   }
 
+  /**
+   * 重复书签合并（`merge-duplicates`）。
+   *
+   * 计划（分组 / keeper / donors）由主进程用 `shared/duplicates.ts` 的纯函数算出，
+   * 渲染层的预览用的是同一份逻辑，所以「预览里看到的组」与「实际被合并的组」一致。
+   *
+   * - **一次 IPC = 主进程一次读 + 一次写**；返回的 `bookmarks` 是合并后的完整列表，
+   *   这里直接整体替换本地数组（donors 消失 + keeper 字段改写一次到位）；
+   * - **不弹成功 toast**：汇总由调用方（`MergeDuplicatesDialog`）展示；
+   * - 失败提示 `message.mergeDuplicatesFailed` 并 rethrow。
+   */
+  const mergeDuplicates = async (): Promise<{ groups: number; removed: number }> => {
+    try {
+      const result = await window.electronAPI.mergeDuplicates()
+      const list = Array.isArray(result?.bookmarks) ? result.bookmarks : []
+      bookmarks.value = list
+
+      return {
+        groups: typeof result?.groups === 'number' ? result.groups : 0,
+        removed: typeof result?.removed === 'number' ? result.removed : 0
+      }
+    } catch (error) {
+      ElMessage.error(t('message.mergeDuplicatesFailed'))
+      console.error(error)
+      throw error
+    }
+  }
+
   const searchBookmarks = (keyword: string) => {
     if (!keyword.trim()) {
       return bookmarks.value
@@ -279,6 +307,7 @@ export const useBookmarkStore = defineStore('bookmark', () => {
     deleteBookmark,
     bulkUpdate,
     bulkDelete,
+    mergeDuplicates,
     checkLinks,
     incrementVisitCount,
     clearAllBookmarks,

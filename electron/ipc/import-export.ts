@@ -3,6 +3,9 @@ import { v4 as uuidv4 } from 'uuid'
 import fs from 'fs'
 import path from 'path'
 import { readJsonFile, writeJsonFile } from '../utils/storage'
+// URL 去重键的唯一实现放在 `shared/`：导入去重与「重复书签合并」必须用同一套归一化规则，
+// 否则「导入时被判重而跳过」的 URL 在合并预览里会看不见（反之亦然）。
+import { normalizeUrlKey } from '../../shared/url-key'
 // replace 模式会丢弃全部旧书签，它们的访问历史必须一起清掉，并纳入同一个写入事务
 import { restoreHistory, snapshotHistory } from './history'
 
@@ -92,26 +95,9 @@ function normalizeNameKey(name: unknown): string {
 }
 
 /**
- * 去重键：URL 归一化 —— 补 https（无协议时）、去尾部斜杠、host 小写。
- * 解析失败时退化为「去尾部斜杠 + 小写」的字符串比较。
+ * URL 去重键：实现已抽到 `shared/url-key.ts`（导入去重与重复书签合并共用）。
+ * 这里保留同名调用点，因此本文件其余逻辑一字未改。
  */
-function normalizeUrlKey(url: unknown): string {
-  if (typeof url !== 'string') return ''
-
-  const value = url.trim()
-  if (!value) return ''
-
-  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`
-
-  try {
-    const parsed = new URL(candidate)
-    const pathname = parsed.pathname.replace(/\/+$/, '')
-    return `${parsed.protocol}//${parsed.host.toLowerCase()}${pathname}${parsed.search}${parsed.hash}`
-  } catch {
-    return value.replace(/\/+$/, '').toLowerCase()
-  }
-}
-
 function buildUrlIndex(bookmarks: Array<{ url?: unknown }>): Set<string> {
   const index = new Set<string>()
   bookmarks.forEach(bookmark => {

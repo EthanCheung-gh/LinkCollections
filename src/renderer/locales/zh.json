@@ -154,7 +154,10 @@
     "additionalBrowsers": "备选浏览器",
     "checkLinks": "检查失效链接",
     "checkLinksDesc": "确认每个书签是否仍可访问（先用 HEAD，失败时退回 GET）",
-    "checkingLinks": "检查中..."
+    "checkingLinks": "检查中...",
+    "mergeDuplicates": "合并重复书签",
+    "mergeDuplicatesDesc": "找出指向同一网址的书签，合并为一条",
+    "mergeDuplicatesAction": "预览并合并"
   },
   "importExport": {
     "title": "导入 / 导出",
@@ -183,6 +186,16 @@
     "deleteBroken": "删除失效书签",
     "statusCode": "HTTP {status}",
     "unknownReason": "原因未知"
+  },
+  "duplicates": {
+    "title": "合并重复书签",
+    "summary": "共 {groups} 组重复，将删除 {redundant} 条书签",
+    "keep": "保留",
+    "remove": "将删除",
+    "more": "还有 {count} 条",
+    "none": "没有发现重复书签",
+    "merge": "合并",
+    "confirm": "确定合并 {count} 条重复书签吗？多余的副本将被删除且无法恢复。"
   },
   "stats": {
     "title": "统计",
@@ -281,6 +294,8 @@
     "bulkUpdated": "已更新 {count} 个书签",
     "bulkDeleted": "已删除 {count} 个书签",
     "historyLoadFailed": "加载访问历史失败",
-    "linkCheckFailed": "检查失效链接失败"
+    "linkCheckFailed": "检查失效链接失败",
+    "duplicatesMerged": "已合并 {count} 条重复书签",
+    "mergeDuplicatesFailed": "合并重复书签失败"
   }
 }
